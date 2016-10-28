@@ -280,4 +280,22 @@ Section Semantics.
 (* To be changed once we know what we want *)
 Variables memory : Type.
 
+Inductive step : instr * instructions * stack * memory ->
+                 instructions * stack * memory -> Prop :=
+| stepDrop : forall ins x s m, step (Drop, ins, x::s, m)
+                               (ins, s, m)
+| stepIfTrue : forall cont insT insF s m,
+    step (If insT insF, cont, Dtrue :: s, m)
+         (insT ++ cont, s, m)
+| stepIfFalse : forall cont insT insF s m,
+    step (If insT insF, cont, Dfalse :: s, m)
+         (insF ++ cont, s, m)
+| stepLoopGo : forall cont body s m,
+    step (Loop body, cont, Dtrue :: s, m)
+         (body ++ (Loop body :: cont), s, m)
+| stepLoopEnd : forall cont body s m,
+    step (Loop body, cont, Dfalse :: s, m)
+         (cont, s, m)
+.
+
 End Semantics.
