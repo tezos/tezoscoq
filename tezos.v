@@ -1,6 +1,8 @@
-Require Import mathcomp.ssreflect.ssreflect mathcomp.ssreflect.ssrfun mathcomp.ssreflect.ssrbool mathcomp.ssreflect.ssrnat.
-Require Import ZArith.
-Require Import String.
+From mathcomp.ssreflect
+  Require Import ssreflect ssrfun ssrbool ssrnat.
+From Coq
+  Require Import ZArith String List.
+Import ListNotations.
 
 Section Grammar.
 
