@@ -1,5 +1,5 @@
 From mathcomp.ssreflect
-  Require Import ssreflect ssrfun ssrbool ssrnat.
+  Require Import ssreflect ssrfun ssrbool ssrnat seq.
 From Coq
   Require Import ZArith String List.
 Import ListNotations.
@@ -41,7 +41,7 @@ Set Implicit Arguments.
     (*   | Contract <type> <type> <contract constant> *)
     (*   | Lambda <type> <type> { <instruction> ... } *)
 
-Inductive tez := Tez : nat -> tez. 
+Inductive tez := Tez : nat -> tez.
 
 Inductive tagged_data:=
       | Int8 : Z -> tagged_data
@@ -280,6 +280,13 @@ Section Semantics.
 (* To be changed once we know what we want *)
 Variables memory : Type.
 
+(* until we get a better sense of what works best, we will try two
+ways to do the small steps semantics: one with an inductive type of
+reduction rules, and one with a step function. *)
+
+(* First version: inductive semantics *)
+Section Ind_semantics.
+
 Inductive step : instr * instructions * stack * memory ->
                  instructions * stack * memory -> Prop :=
 | stepDrop : forall ins x s m, step (Drop, ins, x::s, m)
@@ -297,5 +304,30 @@ Inductive step : instr * instructions * stack * memory ->
     step (Loop body, cont, Dfalse :: s, m)
          (cont, s, m)
 .
+
+End Ind_semantics.
+
+
+(* Second version: with a step function *)
+Section Fun_semantics.
+
+Fixpoint step_fun (i : instr) (ix : instructions) (s : stack) (m : memory) : option (instructions * stack * memory) :=
+  match i with
+    | Drop => if s is x::xs then Some(ix,xs,m) else None
+    | If bt bf => if s is x::xs then
+                    match x with
+                      | Dtrue => Some(bt++ix,s,m)
+                      | Dfalse => Some(bf++ix,s,m)
+                      | _ => None
+                    end else None
+    | Loop body => if s is x::xs then
+                  match x with
+                    | Dtrue => Some(body++(Loop body :: ix),s,m)
+                    | Dfalse => Some(ix,s,m)
+                    | _ => None
+                  end else None
+  end.
+
+End Fun_semantics.
 
 End Semantics.
