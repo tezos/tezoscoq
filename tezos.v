@@ -96,7 +96,14 @@ End Instructions.
 
 Section Types.
 
-Inductive type :=
+Inductive instr_type :=
+  Pre_post : stack_type -> stack_type -> instr_type
+with stack_type :=
+| empty_stack : stack_type
+| cons_stack : type -> stack_type -> stack_type
+| stack_var : nat -> stack_type
+| stack_anon : stack_type
+with type :=
 | t_int8 : type
 | t_void : type
 | t_bool : type
@@ -104,16 +111,13 @@ Inductive type :=
 | t_tez : tez -> type
 | t_contract : type -> type -> type
 | t_var : nat -> type
-| t_anon : type.
+| t_anon : type
+| t_quotation : instr_type -> type.
 
-Inductive stack_type :=
-| empty_stack : stack_type
-| cons_stack : type -> stack_type -> stack_type
-| stack_var : nat -> stack_type
-| stack_anon : stack_type.
+  (* * `lambda T_arg T_ret` is a shortcut for `[ T_arg :: [] -> T_ret :: []]`. *)
+Definition lambda t_arg t_ret :=
+  t_quotation (Pre_post (cons_stack t_arg empty_stack) (cons_stack t_ret empty_stack)).
 
-Inductive instr_type :=
-  Pre_post : stack_type -> stack_type -> instr_type.
 
 End Types.
 
