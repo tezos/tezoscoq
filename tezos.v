@@ -6,52 +6,24 @@ Import ListNotations.
 
 Set Implicit Arguments.
 
-    (* <tagged data> ::= *)
-    (*   | Int8 <int constant> *)
-    (*   | Int16 <int constant> *)
-    (*   | Int32 <int constant> *)
-    (*   | Int64 <int constant> *)
-    (*   | Uint8 <int constant> *)
-    (*   | Uint16 <int constant> *)
-    (*   | Uint32 <int constant> *)
-    (*   | Uint64 <int constant> *)
-    (*   | Void *)
-    (*   | True *)
-    (*   | False *)
-    (*   | <string constant> *)
-    (*   | <float constant> *)
-    (*   | Timestamp <timestamp constant> *)
-    (*   | Signature <signature constant> *)
-    (*   | Tez <tez constant> *)
-    (*   | Key <key constant> *)
-    (*   | Left <tagged data> <type> *)
-    (*   | Right <type> <tagged data> *)
-    (*   | Or <type> <type> <untagged data> *)
-    (*   | Ref <tagged data> *)
-    (*   | Ref <type> <untagged data> *)
-    (*   | Some <tagged data> *)
-    (*   | Some <type> <untagged data> *)
-    (*   | None <type> *)
-    (*   | Option <type> <untagged data> *)
-    (*   | Pair <tagged data> <tagged data> *)
-    (*   | Pair <type> <type> <untagged data> <untagged data> *)
-    (*   | List <type> <untagged data> ... *)
-    (*   | Set <comparable type> <untagged data> ... *)
-    (*   | Map <comparable type> <type> (Item <untagged data> <untagged data>) ... *)
-    (*   | Contract <type> <type> <contract constant> *)
-    (*   | Lambda <type> <type> { <instruction> ... } *)
+Section Data.
 
 Inductive tez := Tez : nat -> tez.
 
+(* for now, many items are commented as we are trying to get the
+architecture right and don't want to get clogged with very similar
+cases over and over. As we get more confident that we got things
+right, we will uncomment new elements *)
+
 Inductive tagged_data:=
       | Int8 : Z -> tagged_data
-      | Int16 : Z -> tagged_data
-      | Int32 : Z -> tagged_data
-      | Int64 : Z -> tagged_data
-      | Uint8 : Z -> tagged_data
-      | Uint16 : Z -> tagged_data
-      | Uint32 : Z -> tagged_data
-      | Uint64 : Z -> tagged_data
+      (* | Int16 : Z -> tagged_data *)
+      (* | Int32 : Z -> tagged_data *)
+      (* | Int64 : Z -> tagged_data *)
+      (* | Uint8 : Z -> tagged_data *)
+      (* | Uint16 : Z -> tagged_data *)
+      (* | Uint32 : Z -> tagged_data *)
+      (* | Uint64 : Z -> tagged_data *)
       | Void
       | Dtrue
       | Dfalse
@@ -79,114 +51,9 @@ Inductive tagged_data:=
       (* | Lambda <type> <type> { <instruction> ... } *)
 
 
-    (* <untagged data> ::= *)
-    (*   | <int constant> *)
-    (*   | <string constant> *)
-    (*   | <float constant> *)
-    (*   | <timestamp constant> *)
-    (*   | <signature constant> *)
-    (*   | <key constant> *)
-    (*   | <tez constant> *)
-    (*   | <contract constant> *)
-    (*   | Void *)
-    (*   | True *)
-    (*   | False *)
-    (*   | Pair <untagged data> <untagged data> *)
-    (*   | Left <untagged data> *)
-    (*   | Right <untagged data> *)
-    (*   | Ref <untagged data> *)
-    (*   | Some <untagged data> *)
-    (*   | None *)
-    (*   | List <untagged data> ... *)
-    (*   | Set <untagged data> ... *)
-    (*   | Map (Item <untagged data> <untagged data>) ... *)
-
-
-
-    (* <instruction> ::= *)
-    (*   | { <instruction> ... } *)
-    (*   | DROP *)
-    (*   | DUP *)
-    (*   | SWAP *)
-    (*   | PUSH <tagged data> *)
-    (*   | SOME *)
-    (*   | NONE <type> *)
-    (*   | IF_NONE { <instruction> ... } { <instruction> ... } *)
-    (*   | PAIR *)
-    (*   | CAR *)
-    (*   | CDR *)
-    (*   | LEFT <type> *)
-    (*   | RIGHT <type> *)
-    (*   | IF_LEFT { <instruction> ... } { <instruction> ... } *)
-    (*   | NIL <type> *)
-    (*   | CONS *)
-    (*   | IF_CONS { <instruction> ... } { <instruction> ... } *)
-    (*   | EMPTY_SET <type> *)
-    (*   | EMPTY_MAP <comparable type> <type> *)
-    (*   | ITER *)
-    (*   | MAP *)
-    (*   | REDUCE *)
-    (*   | MEM *)
-    (*   | GET *)
-    (*   | UPDATE *)
-    (*   | REF *)
-    (*   | DEREF *)
-    (*   | SET *)
-    (*   | IF { <instruction> ... } { <instruction> ... } *)
-    (*   | LOOP { <instruction> ... } *)
-    (*   | LAMBDA <type> <type> { <instruction> ... } *)
-    (*   | EXEC *)
-    (*   | DIP { <instruction> ... } *)
-    (*   | FAIL *)
-    (*   | NOP *)
-    (*   | CONCAT *)
-    (*   | ADD *)
-    (*   | SUB *)
-    (*   | MUL *)
-    (*   | DIV *)
-    (*   | ABS *)
-    (*   | NEG *)
-    (*   | MOD *)
-    (*   | LSL *)
-    (*   | LSR *)
-    (*   | OR *)
-    (*   | AND *)
-    (*   | XOR *)
-    (*   | NOT *)
-    (*   | COMPARE *)
-    (*   | EQ *)
-    (*   | NEQ *)
-    (*   | LT *)
-    (*   | GT *)
-    (*   | LE *)
-    (*   | GE *)
-    (*   | CAST *)
-    (*   | CHECKED_ABS *)
-    (*   | CHECKED_NEG *)
-    (*   | CHECKED_ADD *)
-    (*   | CHECKED_SUB *)
-    (*   | CHECKED_MUL *)
-    (*   | CHECKED_CAST *)
-    (*   | FLOOR *)
-    (*   | CEIL *)
-    (*   | INF *)
-    (*   | NAN *)
-    (*   | ISNAN *)
-    (*   | NANAN *)
-    (*   | MANAGER *)
-    (*   | TRANSFER_FUNDS *)
-    (*   | CREATE_ACCOUNT *)
-    (*   | CREATE_CONTRACT *)
-    (*   | NOW *)
-    (*   | AMOUNT *)
-    (*   | BALANCE *)
-    (*   | CHECK_SIGNATURE *)
-    (*   | H *)
-    (*   | STEPS_TO_QUOTA *)
-    (*   | SOURCE <type> <type> *)
-
 Definition stack := list tagged_data.
 
+End Data.
 
 Section Instructions.
 
@@ -227,53 +94,46 @@ Fixpoint instr_ind' (i : instr) : P i :=
     end.
 End Instructions.
 
-(* <type> ::= *)
-(*       | int8 *)
-(*       | int16 *)
-(*       | int32 *)
-(*       | int64 *)
-(*       | uint8 *)
-(*       | uint16 *)
-(*       | uint32 *)
-(*       | uint64 *)
-(*       | void *)
-(*       | string *)
-(*       | float *)
-(*       | tez *)
-(*       | bool *)
-(*       | key *)
-(*       | timestamp *)
-(*       | signature *)
-(*       | ref <type> *)
-(*       | option <type> *)
-(*       | list <type> *)
-(*       | set <comparable type> *)
-(*       | contract <type> <type> *)
-(*       | pair <type> <type> *)
-(*       | union <type> <type> *)
-(*       | lambda <type> <type> *)
-(*       | map <comparable type> <type> *)
+Section Types.
 
 Inductive type :=
-| void : type
-| ttez : tez -> type
-| tcontract : type -> type -> type.
+| t_int8 : type
+| t_void : type
+| t_bool : type
+| t_string : type
+| t_tez : tez -> type
+| t_contract : type -> type -> type
+| t_var : nat -> type
+| t_anon : type.
 
-    (* <comparable type> ::= *)
-    (*   | int8 *)
-    (*   | int16 *)
-    (*   | int32 *)
-    (*   | int64 *)
-    (*   | uint8 *)
-    (*   | uint16 *)
-    (*   | uint32 *)
-    (*   | uint64 *)
-    (*   | string *)
-    (*   | float *)
-    (*   | tez *)
-    (*   | bool *)
-    (*   | key *)
-    (*   | timestamp *)
+Inductive stack_type :=
+| empty_stack : stack_type
+| cons_stack : type -> stack_type -> stack_type
+| stack_var : nat -> stack_type
+| stack_anon : stack_type.
+
+Inductive instr_type :=
+  Pre_post : stack_type -> stack_type -> instr_type.
+
+End Types.
+
+Section Typing.
+(* Here we want to talk about typing judgements, for data,
+instructions and programs *)
+
+(* FIXME: this is obviously not what we want here:
+- notations are needed
+- variables indexed by nats are not satisfying
+ *)
+Fixpoint get_instr_type (i : instr) : option instr_type :=
+  match i with
+    | Drop => Some (Pre_post (cons_stack t_anon (stack_var 0)) (stack_var 0))
+    | If bt bf => Some (Pre_post (cons_stack t_bool (cons_stack (t_var 0) (stack_var 0))) (cons_stack (t_var 1) (stack_var 0)))
+      (* Some (Pre_post) *)
+    | _ => (* TODO *) None
+  end.
+
+End Typing.
 
 Section Semantics.
 
