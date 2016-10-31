@@ -147,6 +147,15 @@ with has_type : tagged_data -> type -> Prop :=
      | T_boolT : has_type Dtrue t_bool
      | T_boolF : has_type Dfalse t_bool.
 
+(* is this useful? *)
+Scheme has_prog_type_ind' := Induction for has_prog_type Sort Prop
+with has_instr_type_ind' := Induction for has_instr_type Sort Prop
+with has_stack_type_ind' := Induction for has_stack_type Sort Prop
+with has_type_ind' := Induction for has_type Sort Prop.
+
+(* Print has_prog_type_ind. *)
+(* Print has_prog_type_ind'. *)
+
 Hint Constructors has_prog_type.
 Hint Constructors has_instr_type.
 Hint Constructors has_stack_type.
@@ -169,35 +178,33 @@ apply: PT_seq; last auto.
 exact: HIT.
 Qed.
 
-(* the clumsiness this one illustrates that it's probably not a good
-idea to type an instruction against a stack, but to type a program
-independently *)
-
+(* the clumsiness of this next one illustrates that it's probably not
+a good idea to type an instruction against a stack, but to type a
+program independently *)
 Lemma PT_prog_to_instr i t : has_prog_type [::i] t -> exists s, has_instr_type i s t.
 Proof.
 case Ht : t => [s0 s1].
 case: i => [|bt bf|body].
-move => HIT.
-inversion HIT.
-inversion H4.
-inversion H2.
-rewrite H7.
-exists s.
-rewrite -H10.
-apply: IT_Drop => // .
-by rewrite -H7.
-
-move => HIT.
-inversion HIT.
-exists s.
-inversion H2.
-inversion H4.
-by apply: IT_If => // ; try rewrite -H16 //.
-move => HIT.
-inversion HIT.
-exists s.
-inversion H4.
-by rewrite -H7.
+- move => HIT.
+  inversion HIT.
+  inversion H4.
+  inversion H2.
+  rewrite H7.
+  exists s.
+  rewrite -H10.
+  apply: IT_Drop => // .
+  by rewrite -H7.
+- move => HIT.
+  inversion HIT.
+  exists s.
+  inversion H2.
+  inversion H4.
+  by apply: IT_If => // ; try rewrite -H16 //.
+- move => HIT.
+  inversion HIT.
+  exists s.
+  inversion H4.
+  by rewrite -H7.
 Qed.
 
 End Typing.
