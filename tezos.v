@@ -1,8 +1,8 @@
-From mathcomp.ssreflect
-  Require Import ssreflect ssrfun ssrbool ssrnat seq.
 From Coq
   Require Import ZArith String List.
 Import ListNotations.
+From mathcomp.ssreflect
+  Require Import ssreflect ssrfun ssrbool ssrnat seq.
 
 Set Implicit Arguments.
 
@@ -121,29 +121,84 @@ Section Typing.
 (* Here we want to talk about typing judgements, for data,
 instructions and programs *)
 
-Inductive has_prog_type : list instr -> instr_type -> Type :=
-| has_prog_type_empty : forall st, has_prog_type nil (Pre_post st st)
-| has_prog_type_seq : forall x xs s sa sb sc, has_instr_type x s (Pre_post sa sb) -> has_prog_type xs (Pre_post sb sc) -> has_prog_type (x::xs) (Pre_post sa sc)
-with has_instr_type : instr -> stack -> instr_type -> Type :=
-  | has_type_Drop : forall x s (t : type) (st : stack_type),
+Inductive has_prog_type : list instr -> instr_type -> Prop :=
+| PT_empty : forall st, has_prog_type nil (Pre_post st st)
+| PT_seq : forall x xs s sa sb sc, has_instr_type x s (Pre_post sa sb) -> has_prog_type xs (Pre_post sb sc) -> has_prog_type (x::xs) (Pre_post sa sc)
+with has_instr_type : instr -> stack -> instr_type -> Prop :=
+  | IT_Drop : forall x s (t : type) (st : stack_type),
                       has_stack_type s st ->
                       has_type x t ->
                       has_instr_type Drop (x::s) (Pre_post (cons_stack t st) (st))
 
-  | has_type_If : forall bvar sta stb bt bf xs,
+  | IT_If : forall bvar sta stb bt bf xs,
                     has_type bvar t_bool ->
                     has_stack_type xs sta ->
                     has_prog_type bt (Pre_post sta stb) ->
                     has_prog_type bf (Pre_post sta stb) ->
                     has_instr_type (If bt bf) (bvar::xs) (Pre_post (cons_stack t_bool sta) stb)
 
-with has_stack_type : stack -> stack_type -> Type :=
-     | has_stack_type_empty : has_stack_type (nil) empty_stack
-     | has_stack_type_cons : forall x xs t st, has_type x t -> has_stack_type xs st -> has_stack_type (x::xs) (cons_stack t st)
-with has_type : tagged_data -> type -> Type :=
-     | has_type_boolT : has_type Dtrue t_bool
-     | has_type_boolF : has_type Dfalse t_bool.
+with has_stack_type : stack -> stack_type -> Prop :=
+     | ST_empty : has_stack_type nil empty_stack
+     | ST_cons : forall x xs t st,
+                               has_type x t ->
+                               has_stack_type xs st ->
+                               has_stack_type (x::xs) (cons_stack t st)
+with has_type : tagged_data -> type -> Prop :=
+     | T_boolT : has_type Dtrue t_bool
+     | T_boolF : has_type Dfalse t_bool.
 
+Hint Constructors has_prog_type.
+Hint Constructors has_instr_type.
+Hint Constructors has_stack_type.
+Hint Constructors has_type.
+
+(* test *)
+Lemma Drop_typing_example : has_prog_type [::Drop] (Pre_post (cons_stack t_bool empty_stack)(empty_stack)).
+Proof.
+apply: PT_seq; try auto.
+apply: IT_Drop.
+exact: ST_empty.
+exact: T_boolT.
+Qed.
+
+Lemma PT_instr_to_prog i s t : has_instr_type i s t -> has_prog_type [::i] t.
+Proof.
+case: t => s0 s1.
+move => HIT.
+apply: PT_seq; last auto.
+exact: HIT.
+Qed.
+
+(* the clumsiness this one illustrates that it's probably not a good
+idea to type an instruction against a stack, but to type a program
+independently *)
+
+Lemma PT_prog_to_instr i t : has_prog_type [::i] t -> exists s, has_instr_type i s t.
+Proof.
+case Ht : t => [s0 s1].
+case: i => [|bt bf|body].
+move => HIT.
+inversion HIT.
+inversion H4.
+inversion H2.
+rewrite H7.
+exists s.
+rewrite -H10.
+apply: IT_Drop => // .
+by rewrite -H7.
+
+move => HIT.
+inversion HIT.
+exists s.
+inversion H2.
+inversion H4.
+by apply: IT_If => // ; try rewrite -H16 //.
+move => HIT.
+inversion HIT.
+exists s.
+inversion H4.
+by rewrite -H7.
+Qed.
 
 End Typing.
 
