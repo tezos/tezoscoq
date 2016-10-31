@@ -101,8 +101,6 @@ Inductive instr_type :=
 with stack_type :=
 | empty_stack : stack_type
 | cons_stack : type -> stack_type -> stack_type
-| stack_var : nat -> stack_type
-| stack_anon : stack_type
 with type :=
 | t_int8 : type
 | t_void : type
@@ -110,8 +108,6 @@ with type :=
 | t_string : type
 | t_tez : tez -> type
 | t_contract : type -> type -> type
-| t_var : nat -> type
-| t_anon : type
 | t_quotation : instr_type -> type.
 
   (* * `lambda T_arg T_ret` is a shortcut for `[ T_arg :: [] -> T_ret :: []]`. *)
@@ -125,17 +121,29 @@ Section Typing.
 (* Here we want to talk about typing judgements, for data,
 instructions and programs *)
 
-(* FIXME: this is obviously not what we want here:
-- notations are needed
-- variables indexed by nats are not satisfying
- *)
-Fixpoint get_instr_type (i : instr) : option instr_type :=
-  match i with
-    | Drop => Some (Pre_post (cons_stack t_anon (stack_var 0)) (stack_var 0))
-    | If bt bf => Some (Pre_post (cons_stack t_bool (cons_stack (t_var 0) (stack_var 0))) (cons_stack (t_var 1) (stack_var 0)))
-      (* Some (Pre_post) *)
-    | _ => (* TODO *) None
-  end.
+Inductive has_prog_type : list instr -> instr_type -> Type :=
+| has_prog_type_empty : forall st, has_prog_type nil (Pre_post st st)
+| has_prog_type_seq : forall x xs s sa sb sc, has_instr_type x s (Pre_post sa sb) -> has_prog_type xs (Pre_post sb sc) -> has_prog_type (x::xs) (Pre_post sa sc)
+with has_instr_type : instr -> stack -> instr_type -> Type :=
+  | has_type_Drop : forall x s (t : type) (st : stack_type),
+                      has_stack_type s st ->
+                      has_type x t ->
+                      has_instr_type Drop (x::s) (Pre_post (cons_stack t st) (st))
+
+  | has_type_If : forall bvar sta stb bt bf xs,
+                    has_type bvar t_bool ->
+                    has_stack_type xs sta ->
+                    has_prog_type bt (Pre_post sta stb) ->
+                    has_prog_type bf (Pre_post sta stb) ->
+                    has_instr_type (If bt bf) (bvar::xs) (Pre_post (cons_stack t_bool sta) stb)
+
+with has_stack_type : stack -> stack_type -> Type :=
+     | has_stack_type_empty : has_stack_type (nil) empty_stack
+     | has_stack_type_cons : forall x xs t st, has_type x t -> has_stack_type xs st -> has_stack_type (x::xs) (cons_stack t st)
+with has_type : tagged_data -> type -> Type :=
+     | has_type_boolT : has_type Dtrue t_bool
+     | has_type_boolF : has_type Dfalse t_bool.
+
 
 End Typing.
 
