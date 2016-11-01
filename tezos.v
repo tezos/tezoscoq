@@ -136,6 +136,10 @@ with has_instr_type : instr -> stack -> instr_type -> Prop :=
                     has_prog_type bt (Pre_post sta stb) ->
                     has_prog_type bf (Pre_post sta stb) ->
                     has_instr_type (If bt bf) (bvar::xs) (Pre_post (cons_stack t_bool sta) stb)
+  | IT_Loop : forall s a body,
+      has_stack_type s (cons_stack t_bool a) ->
+      has_prog_type body (Pre_post a (cons_stack t_bool a)) ->
+      has_instr_type (Loop body) s (Pre_post (cons_stack t_bool a) a)
 
 with has_stack_type : stack -> stack_type -> Prop :=
      | ST_empty : has_stack_type nil empty_stack
@@ -248,19 +252,119 @@ Section Fun_semantics.
 Fixpoint step_fun (i : instr) (ix : instructions) (s : stack) (m : memory) : option (instructions * stack * memory) :=
   match i with
     | Drop => if s is x::xs then Some(ix,xs,m) else None
-    | If bt bf => if s is x::xs then
+    | If bt bf => if s is x::s then
                     match x with
                       | Dtrue => Some(bt++ix,s,m)
                       | Dfalse => Some(bf++ix,s,m)
                       | _ => None
                     end else None
-    | Loop body => if s is x::xs then
+    | Loop body => if s is x::s then
                   match x with
                     | Dtrue => Some(body++(Loop body :: ix),s,m)
                     | Dfalse => Some(ix,s,m)
                     | _ => None
                   end else None
   end.
+
+Fixpoint evaluate (ix : instructions) (s : stack) (m : memory) (f : nat) : option (stack * memory) :=
+  match f with
+    | 0 => None
+    | S f => match ix with
+               | nil => Some (s,m)
+               | i::ix => match (step_fun i ix s m) with
+                            | None => None
+                            | Some(ix',s',m') => evaluate ix' s' m' f
+                          end
+             end
+  end.
+
+Lemma has_prog_type_cat : forall p q st1 st2 st3,
+  has_prog_type p (Pre_post st1 st2) ->
+  has_prog_type q (Pre_post st2 st3) ->
+  has_prog_type (p++q) (Pre_post st1 st3).
+Proof.
+elim => [|p ps Hps] /=.
+- move => q st1 st2 st3.
+  move => Hnil.
+  by inversion Hnil.
+- move => q st1 st2 st3.
+  move => Hp Hq.
+  inversion Hp.
+  apply: PT_seq; last first.
+  apply: Hps.
+    exact: H4.
+  exact: Hq.
+  exact: H2.
+Qed.
+
+Lemma step_fun_preserves_type instrs st1 st2 s m f :
+  has_prog_type instrs (Pre_post st1 st2) ->
+  has_stack_type s st1 ->
+  match (evaluate instrs s m f) with
+    | Some (s',m') => has_stack_type s' st2
+    | None => True end.
+Proof.
+move: f instrs st1 st2 s m.
+elim => [|f HIf] instrs st1 st2 s m //.
+case: instrs => [| i instrs] // .
+  by move => HPT; inversion HPT => HST //=.
+case: i => [|bt bf|body] /=.
+- case: s => [| x s]// .
+  move => HPT HST.
+  inversion HPT.
+  inversion HST.
+  inversion H2.
+  have toto := HIf.
+  apply: HIf.
+    exact: H4.
+  rewrite -H8 in H10.
+  case: H10.
+  by move => _; rewrite -H11 => ->.
+- case: s => [| x s] //; case: x => // .
+  + move => HPT HST.
+    inversion HPT.
+    inversion H2.
+    apply: HIf.
+      apply: has_prog_type_cat.
+        exact: H12.
+        exact: H4.
+    rewrite -H7 in HST.
+    by inversion HST.
+  + move => HPT HST.
+    inversion HPT.
+    inversion H2.
+    apply: HIf.
+      apply: has_prog_type_cat.
+        exact: H13.
+        exact: H4.
+    rewrite -H7 in HST.
+    by inversion HST.
+- case: s => [| x s] //; case: x => // ; last first.
+  + move => HPT HST.
+    inversion HPT.
+    apply: HIf.
+      exact: H4.
+    inversion HST.
+    inversion H2.
+    rewrite -H8 in H11.
+    case: H11 => _.
+    by rewrite -H12 => -> .
+  + move => HPT HST.
+    inversion HPT.
+    inversion H2.
+    apply: HIf.
+      * apply: has_prog_type_cat.
+          exact: H10.
+        apply: PT_seq.
+          apply: IT_Loop.
+            exact: H9.
+          exact: H10.
+        exact: H4.
+      * inversion HST.
+        rewrite -H6 in H14.
+        case: H14 => _.
+        by rewrite -H7 => <-.
+Qed.
 
 End Fun_semantics.
 
