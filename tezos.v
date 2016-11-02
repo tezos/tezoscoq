@@ -274,18 +274,9 @@ Lemma has_prog_type_cat : forall p q st1 st2 st3,
   has_prog_type q (Pre_post st2 st3) ->
   has_prog_type (p++q) (Pre_post st1 st3).
 Proof.
-elim => [|p ps Hps] /=.
-- move => q st1 st2 st3.
-  move => Hnil.
-  by inversion Hnil.
-- move => q st1 st2 st3.
-  move => Hp Hq.
-  inversion Hp.
-  apply: PT_seq; last first.
-  apply: Hps.
-    exact: H4.
-  exact: Hq.
-  exact: H2.
+elim => [|p ps Hps] q st1 st2 st3.
+- by move => Hnil; inversion Hnil.
+- by move => Hp Hq; inversion Hp; econstructor; eauto.
 Qed.
 
 Lemma step_fun_preserves_type pgm st1 st2 s m f :
