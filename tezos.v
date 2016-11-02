@@ -92,6 +92,7 @@ Fixpoint instr_ind' (i : instr) : P i :=
   | If pgm1 pgm2 => If_case (list_instr_ind pgm1) (list_instr_ind pgm2)
   | Loop pgm => Loop_case (list_instr_ind pgm)
   end.
+
 End Program.
 
 Section Types.
