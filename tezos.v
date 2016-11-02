@@ -177,14 +177,14 @@ Example Drop_typing_with_empty_stack :
   has_prog_type [::Drop] (Pre_post (cons_stack t_bool empty_stack)
                                    (empty_stack)).
 Proof.
-repeat econstructor.
+by repeat econstructor.
 Qed.
 
 Lemma PT_instr_to_prog i s t :
   has_instr_type i s t ->
   has_prog_type [::i] t.
 Proof.
-case: t; eauto.
+by case: t; eauto.
 Qed.
 
 (* the clumsiness of this next one illustrates that it's probably not
@@ -197,7 +197,7 @@ Proof.
 case: t => s0 s1 H.
 inversion H; subst.
 inversion H5; subst.
-now exists s.
+by exists s.
 Qed.
 
 End Typing.
