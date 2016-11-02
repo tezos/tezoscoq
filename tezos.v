@@ -8,7 +8,10 @@ Set Implicit Arguments.
 
 Section Data.
 
-Inductive tez := Tez : nat -> tez.
+(* Inductive tez := Tez : nat -> tez. *)
+Axiom tez : Type.
+Axiom timestamp : Type.
+Axiom int64 : Type.
 
 (* for now, many items are commented as we are trying to get the
 architecture right and don't want to get clogged with very similar
@@ -19,7 +22,7 @@ Inductive tagged_data:=
 | Int8 : Z -> tagged_data
 (* | Int16 : Z -> tagged_data *)
 (* | Int32 : Z -> tagged_data *)
-(* | Int64 : Z -> tagged_data *)
+| Int64 : int64 -> tagged_data
 (* | Uint8 : Z -> tagged_data *)
 (* | Uint16 : Z -> tagged_data *)
 (* | Uint32 : Z -> tagged_data *)
@@ -29,9 +32,9 @@ Inductive tagged_data:=
 | Dfalse
 | DString : string -> tagged_data
 (* | <float constant> *)
-(* | Timestamp <timestamp constant> *)
+| Timestamp : timestamp -> tagged_data
 (* | Signature <signature constant> *)
-| DTez : tez -> tagged_data.
+| DTez : tez -> tagged_data
 (* | Key <key constant> *)
 (* | Left <tagged data> <type> *)
 (* | Right <type> <tagged data> *)
@@ -42,7 +45,7 @@ Inductive tagged_data:=
 (* | Some <type> <untagged data> *)
 (* | None <type> *)
 (* | Option <type> <untagged data> *)
-(* | Pair <tagged data> <tagged data> *)
+| DPair : tagged_data -> tagged_data -> tagged_data.
 (* | Pair <type> <type> <untagged data> <untagged data> *)
 (* | List <type> <untagged data> ... *)
 (* | Set <comparable type> <untagged data> ... *)
@@ -53,6 +56,15 @@ Inductive tagged_data:=
 
 Definition stack := list tagged_data.
 
+Definition is_comparable (d : tagged_data) : bool :=
+  match d with
+    | Int8 z  => true
+    | Int64 i => true
+    | Dtrue | Dfalse => true
+    | DTez t => true
+    | _ => false
+  end.
+
 End Data.
 
 Section Program.
@@ -62,8 +74,15 @@ Section Program.
 (* XXX: should we use a notation for `list instr` here? *)
 Inductive instr :=
 | Drop : instr
+| Dup : instr
+| Push : tagged_data -> instr
+| Pair : instr
 | If : list instr -> list instr -> instr
-| Loop : list instr -> instr.
+| Loop : list instr -> instr
+| Le : instr
+| Transfer_funds : instr
+| Now : instr
+| Balance : instr.
 
 Definition program := list instr.
 
@@ -76,10 +95,18 @@ Definition program := list instr.
  *)
 Variable P : instr -> Prop.
 Hypothesis Drop_case : P Drop.
+Hypothesis Dup_case : P Dup.
+Hypothesis Push_case : forall (d : tagged_data), P (Push d).
+Hypothesis Pair_case : P Pair.
 Hypothesis If_case : forall pgm1 pgm2 : program,
     Forall P pgm1 -> Forall P pgm2 -> P (If pgm1 pgm2).
 Hypothesis Loop_case : forall pgm : program,
-    Forall P pgm -> P (Loop pgm).
+                         Forall P pgm -> P (Loop pgm).
+Hypothesis Le_case : P Le.
+Hypothesis Transfer_funds_case : P Transfer_funds.
+Hypothesis Now_case : P Now.
+Hypothesis Balance_case : P Balance.
+
 Fixpoint instr_ind' (i : instr) : P i :=
   let list_instr_ind :=
       (fix list_instr_ind (pgm : program) : Forall P pgm :=
@@ -89,8 +116,15 @@ Fixpoint instr_ind' (i : instr) : P i :=
          end) in
   match i with
   | Drop => Drop_case
+  | Dup => Dup_case
+  | Push d => Push_case d
+  | Pair => Pair_case
   | If pgm1 pgm2 => If_case (list_instr_ind pgm1) (list_instr_ind pgm2)
   | Loop pgm => Loop_case (list_instr_ind pgm)
+  | Le => Le_case
+  | Transfer_funds => Transfer_funds_case
+  | Now => Now_case
+  | Balance => Balance_case
   end.
 
 End Program.
@@ -136,6 +170,11 @@ with has_instr_type : instr -> stack -> instr_type -> Prop :=
     has_stack_type s st ->
     has_type x t ->
     has_instr_type Drop (x::s) (Pre_post (cons_stack t st) (st))
+
+| IT_Dup : forall x s (t : type) (st : stack_type),
+    has_stack_type s st ->
+    has_type x t ->
+    has_instr_type Dup (x::s) (Pre_post (cons_stack t st) (cons_stack t (cons_stack t st)))
 
 | IT_If : forall bvar sta stb bt bf xs,
     has_type bvar t_bool ->
@@ -240,9 +279,24 @@ End Ind_semantics.
 (* Second version: with a step function *)
 Section Fun_semantics.
 
+(* I'm guessing these will be replaced by accesses to memory, with a
+precise spec *)
+Axiom get_timestamp : unit -> timestamp.
+Axiom get_current_amount : unit -> tez.
+
+(* these axioms to model the behavior of Transfer_funds, which I do
+not understand as of now *)
+Axiom get_new_global : tagged_data -> tagged_data.
+Axiom get_return_value : tagged_data -> tagged_data.
+
+Axiom get_le : tagged_data -> int64.
+
 Fixpoint step_fun (i : instr) (pgm : program) (s : stack) (m : memory) : option (program * stack * memory) :=
   match i with
   | Drop => if s is x::xs then Some(pgm,xs,m) else None
+  | Dup => if s is x::xs then Some(pgm,x::x::xs,m) else None
+  | Push d => Some(pgm,d::s,m)
+  | Pair => if s is a::b::s then Some(pgm,(DPair a b)::s,m) else None
   | If bt bf => if s is x::s then
                     match x with
                     | Dtrue => Some(bt++pgm,s,m)
@@ -255,6 +309,11 @@ Fixpoint step_fun (i : instr) (pgm : program) (s : stack) (m : memory) : option 
                   | Dfalse => Some(pgm,s,m)
                   | _ => None
                   end else None
+  | Le => if s is x::s then if is_comparable x then Some(pgm,(Int64 (get_le x))::s,m) else None else None
+  | Transfer_funds => if s is p::amount::contract::g::nil then
+                  Some(pgm,[::get_return_value contract;get_new_global g],m) else None
+  | Now => Some(pgm,Timestamp (get_timestamp tt)::s,m)
+  | Balance => Some(pgm,DTez (get_current_amount tt)::s,m)
   end.
 
 Fixpoint evaluate (pgm : program) (s : stack) (m : memory) (f : nat) : option (stack * memory) :=
@@ -291,18 +350,20 @@ move: f pgm st1 st2 s m.
 elim => [|f HIf] pgm st1 st2 s m //.
 case: pgm => [| i pgm] // .
   by move => HPT; inversion HPT => HST //=.
-case: i => [|bt bf|body] /=.
+case: i => [| | (* Push *) d| | (* If *) bt bf| (* Loop *)body| (* Le *) | | |] /=.
 - case: s => [| x s]// .
   move => HPT HST.
   inversion HPT.
   inversion HST.
   inversion H2.
-  have toto := HIf.
   apply: HIf.
     exact: H4.
   rewrite -H8 in H10.
   case: H10.
-  by move => _; rewrite -H11 => ->.
+    by move => _; rewrite -H11 => -> .
+- admit. (* TODO : Dup *)
+- admit. (* TODO : Push *)
+- admit. (* TODO : Pair *)
 - case: s => [| x s] //; case: x => // .
   + move => HPT HST.
     inversion HPT.
@@ -346,8 +407,12 @@ case: i => [|bt bf|body] /=.
       * inversion HST.
         rewrite -H6 in H14.
         case: H14 => _.
-        by rewrite -H7 => <-.
-Qed.
+          by rewrite -H7 => <- .
+- admit. (* TODO : Le *)
+- admit. (* TODO : Transfer_funds *)
+- admit. (* TODO : Now *)
+- admit. (* TODO : Balance *)
+Admitted.
 
 End Fun_semantics.
 
