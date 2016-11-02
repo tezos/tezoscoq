@@ -173,24 +173,18 @@ Hint Constructors has_stack_type.
 Hint Constructors has_type.
 
 (* test *)
-Lemma Drop_typing_example :
+Example Drop_typing_with_empty_stack :
   has_prog_type [::Drop] (Pre_post (cons_stack t_bool empty_stack)
                                    (empty_stack)).
 Proof.
-apply: PT_seq; try auto.
-apply: IT_Drop.
-exact: ST_empty.
-exact: T_boolT.
+repeat econstructor.
 Qed.
 
 Lemma PT_instr_to_prog i s t :
   has_instr_type i s t ->
   has_prog_type [::i] t.
 Proof.
-case: t => s0 s1.
-move => HIT.
-apply: PT_seq; last auto.
-exact: HIT.
+case: t; eauto.
 Qed.
 
 (* the clumsiness of this next one illustrates that it's probably not
@@ -200,28 +194,10 @@ Lemma PT_prog_to_instr i t :
   has_prog_type [::i] t ->
   exists s, has_instr_type i s t.
 Proof.
-case Ht : t => [s0 s1].
-case: i => [|bt bf|body].
-- move => HIT.
-  inversion HIT.
-  inversion H4.
-  inversion H2.
-  rewrite H7.
-  exists s.
-  rewrite -H10.
-  apply: IT_Drop => // .
-  by rewrite -H7.
-- move => HIT.
-  inversion HIT.
-  exists s.
-  inversion H2.
-  inversion H4.
-  by apply: IT_If => // ; try rewrite -H16 //.
-- move => HIT.
-  inversion HIT.
-  exists s.
-  inversion H4.
-  by rewrite -H7.
+case: t => s0 s1 H.
+inversion H; subst.
+inversion H5; subst.
+now exists s.
 Qed.
 
 End Typing.
