@@ -64,14 +64,18 @@ Inductive instr :=
 | Nop : instr
 | If : instr -> instr -> instr
 | Loop : instr -> instr
+| Dip : instr -> instr
 | Drop : instr
 | Dup : instr
+| Swap : instr
 | Push : tagged_data -> instr
 | Eq : instr
+| Neq : instr
 | Lt : instr
 | Not : instr
 | And : instr
 | Or : instr
+| Mul : instr
 .
 
 End Instructions.
@@ -82,14 +86,18 @@ Notation "c1 ';;' c2" := (Seq c1 c2) (at level 80, right associativity).
 Notation "'NOP'" := (Nop).
 Notation "'IFB' '{{' bt '}}' '{{' bf '}}'" := (If bt bf) (at level 80, right associativity).
 Notation "'LOOP' '{{' body '}}'" := (Loop body) (at level 80, right associativity).
+Notation "'DIP' '{{' code '}}'" := (Dip code) (at level 80, right associativity).
 Notation "'DROP'" := (Drop).
 Notation "'DUP'" := (Dup).
+Notation "'SWAP'" := (Swap).
 Notation "'PUSH' x" := (Push x) (at level 35).
 Notation "'EQ'" := (Eq).
+Notation "'NEQ'" := (Neq).
 Notation "'LT'" := (Lt).
 Notation "'NOT'" := (Not).
 Notation "'AND'" := (And).
 Notation "'OR'" := (Or).
+Notation "'MUL'" := (Mul).
 
 (* tests for notation precedence levels and associativity *)
 Section NotationTests.
@@ -168,9 +176,14 @@ Inductive has_instr_type : instr -> instr_type -> Prop :=
     DROP :i: ([ t ] --> [])
 | IT_Dup : forall t,
     DUP :i: ([ t ] --> [ t ; t ])
+| IT_Swap : forall t1 t2,
+    SWAP :i: ([ t1 ; t2 ] --> [ t2 ; t1 ])
 | IT_Push : forall v t,
     has_data_type v t ->
     PUSH v :i: ([] --> [ t ])
+| IT_Dip : forall t code Sa Sb,
+    code :i: (Sa --> Sb) ->
+    (DIP {{ code }}) :i: (t :: Sa --> t :: Sb)
 | IT_If : forall Sa Sb bt bf,
     bt :i: (Sa --> Sb) ->
     bf :i: (Sa --> Sb) ->
@@ -180,6 +193,11 @@ Inductive has_instr_type : instr -> instr_type -> Prop :=
     (LOOP {{ body }}) :i: (t_bool :: S --> S)
 | IT_Eq :
     EQ :i: ([ t_int64 ] --> [ t_bool ])
+| IT_Neq :
+    NEQ :i: ([ t_int64 ] --> [ t_bool ])
+(* TODO: redefine IT_Mul to take into account other integer (arithmetic?) data types *)
+| IT_Mul :
+    MUL :i: ([ t_int64 ; t_int64 ] --> [ t_int64 ])
 where "i ':i:' IT" := (has_instr_type i IT)
 
 with has_data_type : tagged_data -> type -> Prop :=
@@ -279,7 +297,43 @@ Example typing_push_drop2 :
   :i: ([t_int64] --> [t_int64]).
 Proof. by typecheck_program. Qed.
 
-(* TODO: write and typecheck a program calculating factorial *)
+Definition factorial_program :=
+  (* stack state is given in the comments below *)
+  (* [ n ] -- input parameter, n >= 0 *)
+  DUP ;;
+  (* [ n ; n ] *)
+  EQ ;;
+  (* [ (n = 0)? ; n ] *)
+  IFB {{ DROP ;;
+        (* [] *)
+        PUSH (Int64 1)
+        (* [ 1 ] *) }}        (* return 0! = 1 *)
+      {{ PUSH (Int64 1) ;;    (* push accumulator's initial value *)
+        (* [ acc ; n ] *)    (* acc = 1, n <> 0 *)
+        SWAP ;;
+        (* [ n ; acc ] *)
+        DUP ;;
+        (* [ n ; n ; acc ] *)
+        NEQ ;;
+        (* [ (n <> 0)? ; n; acc ] *)
+        LOOP {{
+          (* [ n ; acc ] *)
+          DUP;;
+          (* [ n ; n ; acc ] *)
+          DIP {{ MUL }} ;;
+          (* [ n ; n * acc ] *)
+          DUP ;;
+          (* [ n ; n ; n * acc ] *)
+          NEQ
+          (* [ (n <> 0)? ; n ; n * acc ] *)
+        }} ;;
+        (* [ 0 ; acc ] *)
+        DROP
+        (* [ acc ] *) }}.
+
+Example typing_factorial :
+  factorial_program :i: ([t_int64] --> [t_int64]).
+Proof. by typecheck_program. Qed.
 
 (* TODO: add some more tests for typechecking *)
 
