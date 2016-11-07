@@ -76,6 +76,7 @@ Inductive instr :=
 | And : instr
 | Or : instr
 | Mul : instr
+| Sub : instr
 .
 
 End Instructions.
@@ -98,6 +99,7 @@ Notation "'NOT'" := (Not).
 Notation "'AND'" := (And).
 Notation "'OR'" := (Or).
 Notation "'MUL'" := (Mul).
+Notation "'SUB'" := (Sub).
 
 (* tests for notation precedence levels and associativity *)
 Section NotationTests.
@@ -198,6 +200,9 @@ Inductive has_instr_type : instr -> instr_type -> Prop :=
 (* TODO: redefine IT_Mul to take into account other integer (arithmetic?) data types *)
 | IT_Mul :
     MUL :i: ([ t_int64 ; t_int64 ] --> [ t_int64 ])
+(* TODO: redefine IT_Sub to take into account other integer (arithmetic?) data types *)
+| IT_Sub :
+    SUB :i: ([ t_int64 ; t_int64 ] --> [ t_int64 ])
 where "i ':i:' IT" := (has_instr_type i IT)
 
 with has_data_type : tagged_data -> type -> Prop :=
@@ -322,10 +327,16 @@ Definition factorial_program :=
           (* [ n ; n ; acc ] *)
           DIP {{ MUL }} ;;
           (* [ n ; n * acc ] *)
+          PUSH (Int64 1) ;;
+          (* [ 1 ; n ; n * acc ] *)
+          SWAP ;;
+          (* [ n ; 1 ; n * acc ] *)
+          SUB ;;
+          (* [ n-1 ; n * acc ] *)
           DUP ;;
-          (* [ n ; n ; n * acc ] *)
+          (* [ n-1 ; n-1 ; n * acc ] *)
           NEQ
-          (* [ (n <> 0)? ; n ; n * acc ] *)
+          (* [ (n-1 <> 0)? ; n-1 ; n * acc ] *)
         }} ;;
         (* [ 0 ; acc ] *)
         DROP
