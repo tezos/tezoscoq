@@ -143,6 +143,7 @@ with type :=
 | t_void : type
 | t_bool : type
 | t_string : type
+| t_pair : type -> type -> type
 | t_tez : tez -> type
 | t_contract : type -> type -> type
 | t_quotation : instr_type -> type.
@@ -176,6 +177,17 @@ with has_instr_type : instr -> stack -> instr_type -> Prop :=
     has_type x t ->
     has_instr_type Dup (x::s) (Pre_post (cons_stack t st) (cons_stack t (cons_stack t st)))
 
+| IT_Push : forall x s (t : type) (st : stack_type),
+    has_stack_type s st ->
+    has_type x t ->
+    has_instr_type (Push x) s (Pre_post st (cons_stack t st))
+
+| IT_Pair : forall x y s (tx ty : type) (st : stack_type),
+    has_stack_type s st ->
+    has_type x tx ->
+    has_type y ty ->
+    has_instr_type Pair (x::y::s) (Pre_post (cons_stack tx (cons_stack ty st)) (cons_stack (t_pair tx ty) st))
+
 | IT_If : forall bvar sta stb bt bf xs,
     has_type bvar t_bool ->
     has_stack_type xs sta ->
@@ -196,8 +208,11 @@ with has_stack_type : stack -> stack_type -> Prop :=
 
 with has_type : tagged_data -> type -> Prop :=
 | T_boolT : has_type Dtrue t_bool
-| T_boolF : has_type Dfalse t_bool.
-
+| T_boolF : has_type Dfalse t_bool
+| T_pair : forall x y tx ty, 
+    has_type x tx ->
+    has_type y ty ->
+    has_type (DPair x y) (t_pair tx ty).
 (* is this useful? *)
 Scheme has_prog_type_ind' := Induction for has_prog_type Sort Prop
 with has_instr_type_ind' := Induction for has_instr_type Sort Prop
@@ -361,9 +376,51 @@ case: i => [| | (* Push *) d| | (* If *) bt bf| (* Loop *)body| (* Le *) | | |] 
   rewrite -H8 in H10.
   case: H10.
     by move => _; rewrite -H11 => -> .
-- admit. (* TODO : Dup *)
-- admit. (* TODO : Push *)
-- admit. (* TODO : Pair *)
+- (*DUP*)
+  case: s => [| x s] //.
+  move => HPT HST.
+  inversion HPT.
+  clear HPT.
+  inversion H2.
+  rewrite -H5 in HST.
+  inversion HST.
+  apply: HIf.
+  + eauto.
+  + rewrite -H6.
+    apply: ST_cons.
+    * assumption.
+    * apply: ST_cons.
+      - assumption.
+      - assumption.
+
+- (*PUSH*)
+  move => HPT HST.
+  inversion HPT.
+  clear HPT.
+  inversion H2.
+  apply: HIf.
+  + eauto.
+  + rewrite -H7.
+    apply ST_cons.
+    * assumption.
+      assumption.
+
+- (*Pair*)
+  move => HPT HST.
+  inversion HPT.
+  clear HPT.
+  inversion H2.
+  rewrite -H5 in HST.
+  inversion HST.
+  inversion H15.
+  apply: HIf.
+  + eauto.
+  + rewrite -H6.
+    apply ST_cons.
+    * apply T_pair.
+      - assumption.
+      - assumption.
+    * assumption.
 - case: s => [| x s] //; case: x => // .
   + move => HPT HST.
     inversion HPT.
