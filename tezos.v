@@ -2,7 +2,7 @@ From Coq
   Require Import ZArith String List.
 Import ListNotations.
 From mathcomp.ssreflect
-  Require Import ssreflect ssrfun ssrbool ssrnat seq.
+  Require Import ssreflect ssrfun ssrbool ssrnat seq path.
 
 Set Implicit Arguments.
 
@@ -500,6 +500,16 @@ Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack *
 
 end.
 
+
+Lemma step_fun_seq : forall i1 i2 s m,
+  step_fun (i1 ;; i2) s m = if i1 is NOP then step_fun i2 s m else if step_fun i1 s m is Some(i,s',m') then
+                   Some(i;;i2,s',m')
+                 else
+                   None.
+Proof.
+by [].
+Qed.
+
 (* Fixpoint step_fun (i : instr) (pgm : instr) (s : stack) (m : memory) : option (instr * stack * memory) := *)
 (*   match i with *)
 (*   | i1 ;; i2 => step_fun i1 (i2 ;; pgm) s m *)
@@ -579,34 +589,283 @@ end.
 (* | Sub : instr *)
 (* . *)
 
+Section Path.
 
-Fixpoint evaluate (i : instr) (s : stack) (m : memory) (f : nat) : option (stack * memory) :=
-  match f with
-  | 0 => Some(s,m)
-  | S f => match step_fun i s m with
-            | None => None
-            | Some(pgm',s',m') => evaluate pgm' s' m' f
-          end
+Import Option.
+
+Definition ostep_fun state :=
+  match state with
+    | None => None
+    | Some(i,s,m) => step_fun i s m
   end.
 
-Fixpoint evaluate_trace (i : instr) (s : stack) (m : memory) (trace : list stack) (f : nat) : option (list stack * memory) :=
-  match f with
-  | 0 => Some(trace,m)
-  | S f => if i is Nop then Some(trace,m) else match step_fun i s m with
-            | None => None
-            | Some(pgm',s',m') => evaluate_trace pgm' s' m' (s'::trace) f
-          end
-  end.
+Lemma ostep_fun_Nop i2 s m : ostep_fun (Some(NOP;;i2,s,m)) = ostep_fun (Some(i2,s,m)).
+Proof.
+by [].
+Qed.
+
+Definition evaluate fuel state := iter fuel ostep_fun state.
+
+Lemma evaluate_1 st : evaluate 1 st = ostep_fun st.
+Proof.
+by [].
+Qed.
+
+Definition evaluate_trace state := traject ostep_fun state.
+
+Definition evaluates state1 state2 := exists f, evaluate f state1 = state2.
+
+Lemma eval_comp : forall f1 f2 st1 st2 st3,
+  evaluate f1 st1 = st2 ->
+  evaluate f2 st2 = st3 ->
+  evaluate (f1 + f2) st1 = st3.
+Proof.
+elim => [|f1 Hind] f2 st1 st2 st3 .
+  by rewrite /=; move ->; rewrite add0n.
+rewrite /evaluate.
+move => Hev1 Hev2.
+by rewrite addnC iter_add Hev1.
+Qed.
+
+(* This lemma is no longer true *)
+Lemma eval_assoc i1 i2 i3 s m1 f : evaluate f (Some(((i1 ;; i2) ;; i3), s, m1)) = evaluate f (Some((i1;;i2;;i3),s,m1)).
+Proof.
+case: f => [|f] /=.
+Abort.
+
+Definition proj (st : option (instr*stack*memory)) : option (stack * memory) :=
+  match st with
+    | Some(i,s,m) => Some(s,m)
+    | None => None end.
+
+Inductive leads_to : option (instr * stack * memory) -> option (stack * memory) -> Type :=
+| leads_to_self : forall st, leads_to st (proj st)
+| leads_to_trans :
+    forall st1 st2 res,
+      evaluates st1 st2 ->
+      leads_to st2 res ->
+      leads_to st1 res.
+
+
+Lemma leads_to_seq i1 i2 i3 s1 s2 m1 m2 res :
+  ostep_fun (Some(i1;;i2,s1,m1)) = Some(i3,s2,m2) ->
+  leads_to (Some(i3,s2,m2)) res ->
+  leads_to (Some((i1;;i2),s1,m1)) res.
+Proof.
+move => Hstep Hleads.
+apply: leads_to_trans; last exact: Hleads.
+by rewrite /evaluates; exists 1; rewrite evaluate_1.
+Qed.
+
+Lemma leads_to_seq2 i1 i2  s1 m1  res :
+  leads_to (ostep_fun (Some(i1;;i2,s1,m1))) res ->
+  leads_to (Some((i1;;i2),s1,m1)) res.
+Proof.
+move => Hleads.
+apply: leads_to_trans; last exact: Hleads.
+by rewrite /evaluates; exists 1; rewrite evaluate_1.
+Qed.
+
+(* Lemma leads_to_ext i s1 m1 st res : *)
+(*   ostep_fun (Some(NOP;;i,s1,m1)) = st -> *)
+(*   leads_to (Some(i,s1,m1)) res -> *)
+(*   leads_to (Some((NOP;;i),s1,m1)) res. *)
+(* Proof. *)
+(* move => Hstep Hleads. *)
+(* apply: leads_to_seq2. *)
+(* rewrite ostep_fun_seq. *)
+
+(* Lemma foo i2 s m st :  *)
+(*   evaluates (Some(i2,s,m)) st -> *)
+(*   leads_to (Some(NOP;;i2,s,m)) (proj st). *)
+(* Proof. *)
+(* move => Hev. *)
+(* case: Hev => f. *)
+(* case: f => [|f ]. *)
+(* - rewrite /evaluate /=. *)
+
+Lemma evaluatesEq st1 st2 : evaluates st1 st2 <-> exists f, evaluate f st1 = st2.
+Proof.
+split => Heval .
+by case: Heval => n; exists n.
+exact: Heval.
+Qed.
+
+Lemma leads_to_nop i2 s1 m1 res :
+  leads_to ((Some(i2,s1,m1))) res ->
+  leads_to (Some((NOP;;i2),s1,m1)) res.
+Proof.
+(* move => Hleads. *)
+(* inversion Hleads. *)
+(* - exact: leads_to_self. *)
+(* - apply: leads_to_trans; last by apply: X. *)
+(*   case: (evaluatesEq _ _ H). *)
+(*   exists 1; rewrite evaluate_1; by []. *)
+(*   rewrite ostep_fun_Nop. *)
+
+(*   apply:  *)
+(*   rewrite /evaluates in H. *)
+Admitted.
+
+Lemma factorial_correct m1 (n : nat) : leads_to (Some(factorial_program, [::Int64 (Z.of_nat n)],m1)) (Some([::Int64 (Z.of_nat (factorial n))],m1)).
+Proof.
+rewrite /factorial_program.
+apply: leads_to_seq2 => /=.
+apply: leads_to_seq2 => /=.
+apply: leads_to_seq2 => /=.
+case: n => /= [|n].
+- apply: leads_to_seq2 => /= .
+  apply: leads_to_seq2 => /= .
+  exact: leads_to_self.
+- apply: leads_to_seq2 => /= .
+  apply: leads_to_seq2 => /= .
+  apply: leads_to_seq2 => /= .
+  apply: leads_to_seq2 => /= .
+  apply: leads_to_nop.
+
+Admitted.
+
+End Path.
+
+
+(* Fixpoint evaluate (i : instr) (s : stack) (m : memory) (f : nat) : option (instr*stack * memory) := *)
+(*   match f with *)
+(*   | 0 => Some(i,s,m) *)
+(*   | S f => match step_fun i s m with *)
+(*             | None => None *)
+(*             | Some(pgm',s',m') => evaluate pgm' s' m' f *)
+(*           end *)
+(*   end. *)
+
+(* (* Lemma eval_nop pgm m1 f s : evaluate (NOP ;; pgm) s m1 f = evaluate pgm s m1 f. *) *)
+(* (* Proof. *) *)
+(* (*   case: f => //=. *) *)
+(* (* Qed. *) *)
+
+(* Lemma eval_seq s m1 f i : evaluate i s m1 f = *)
+(*   match f with *)
+(*   | 0 => Some(i,s,m1) *)
+(*   | S f => match step_fun i s m1 with *)
+(*             | None => None *)
+(*             | Some(pgm',s',m') => evaluate pgm' s' m' f *)
+(*           end *)
+(*   end. *)
+(* Proof. *)
+(*  by case: f => // f. *)
+(* Qed. *)
+
+(* Lemma eval_assoc i1 i2 i3 s m1 f : evaluate ((i1 ;; i2) ;; i3) s m1 f = evaluate (i1;;i2;;i3) s m1 f. *)
+(* Proof. *)
+(* Admitted. *)
+
+(* Lemma eval_comp : forall f1 f2 i1 i2 s1 s2 m1 m2 final_state, *)
+(*   evaluate i1 s1 m1 f1 = Some(i2,s2,m2) -> *)
+(*   evaluate i2 s2 m2 f2 = final_state -> *)
+(*   evaluate i1 s1 m1 (f1 + f2) = final_state. *)
+(* Proof. *)
+(* elim => [|f1 Hind] f2 i1 i2 s1 s2 m1 m2 final_state. *)
+(*   by rewrite add0n /= => [[]] -> -> ->. *)
+(* move => Hev1 Hev2. *)
+(* rewrite /= in Hev1; move: Hev1. *)
+(* case: (step_fun i1 s1 m1). => // [[[a s] m]] Hev1. *)
+(* rewrite addSnnS. apply :Hind. *)
+
+(* Inductive evaluates : instr -> stack -> memory -> option (instr * stack * memory) -> Type := *)
+(* | evaluates_self : forall i s m, evaluates i s m (Some(i,s,m)) *)
+(* | evaluates_trans :  *)
+(*     forall i s m i' s' m' i'' s'' m'',  *)
+(*       evaluates i s m (Some (i',s',m')) ->  *)
+(*       evaluates i' s' m' (Some (i'',s'',m'')) ->  *)
+(*       evaluates (i;;i') s m (Some (i'',s'',m'')) *)
+(* | evaluates_stepfun : forall i s m, evaluates i s m (step_fun i s m). *)
+
+(* Lemma foo : forall i s m final_state,  *)
+(*               evaluates i s m final_state ->  *)
+(*               exists f, evaluate i s m f =  *)
+(*                         match final_state with  *)
+(*                           | None => None *)
+(*                           | Some(i,s,m) => Some(i,s,m) end. *)
+(* Proof. *)
+(* move => i s m fs. *)
+(* elim. *)
+(* - move => i0 s0 m0. *)
+(*   by exists 0. *)
+(* - move => i0 s0 m0 i' s' m' i'' s'' m'' Hev1 [f1 Hf1] Hev2 [f2 Hf2]. *)
+(*   exists (f1 + f2). *)
+
+(* elim. *)
+(* move => i Hind i' Hindi' s m fs Hev. *)
+(* elim: Hev. *)
+(* move => i0 s0 m0. *)
+(* - by exists 0. *)
+(* - move => i0 s0 m0 i'0 s' m' i'' s'' m''. *)
+(*   move => Hev1 [f1 Hf1] Hev2 [f2 Hf2]. *)
+(*   exists (f1 + f2). rewrite eval_seq. rewrite step_fun_seq. *)
+
+(* Fixpoint evaluate_trace (i : instr) (s : stack) (m : memory) (trace : list stack) (f : nat) : option (list stack * memory) := *)
+(*   match f with *)
+(*   | 0 => Some(trace,m) *)
+(*   | S f => if i is Nop then Some(trace,m) else match step_fun i s m with *)
+(*             | None => None *)
+(*             | Some(pgm',s',m') => evaluate_trace pgm' s' m' (s'::trace) f *)
+(*           end *)
+(*   end. *)
 
 
 Variable m : memory.
 
-Eval compute in evaluate factorial_program [::Int64 5] m 1000.
-Eval compute in evaluate_trace factorial_program [::Int64 5] m [::[::Int64 5]] 100.
-Eval compute in step_fun (DROP ;; DROP) [::Int8 1;Int8 1] m.
-Eval compute in step_fun (NOP ;; DROP) [::Int8 1] m.
-Eval compute in evaluate (DROP) [::Int8 1; Int8 1] m 1.
-Eval compute in evaluate (DROP ;; DROP) [::Int8 1;Int8 1] m 100.
+(* Eval native_compute in evaluate factorial_program [::Int64 66] m 1000. *)
+(* Eval native_compute in evaluate_trace factorial_program [::Int64 5] m [::[::Int64 5]] 100. *)
+(* Eval native_compute in step_fun (DROP ;; DROP) [::Int8 1;Int8 1] m. *)
+(* Eval compute in step_fun (NOP ;; DROP) [::Int8 1] m. *)
+(* Eval compute in evaluate (DROP) [::Int8 1; Int8 1] m 1. *)
+(* Eval compute in evaluate (DROP ;; DROP) [::Int8 1;Int8 1] m 100. *)
+
+
+(* Open Scope nat_scope. *)
+(* Locate nat. *)
+
+
+(* Inductive hoare : Prop -> instr -> Prop -> Type := *)
+(* | Hnop : forall P i, hoare P i P *)
+(* | Hcmp : forall i1 i2 P Q R, hoare P i1 Q -> hoare Q i2 R -> hoare P (i1 ;; i2) R *)
+(* (* missing rules here of course *) *)
+(* | Hloop : forall body P Q, hoare  *)
+(* . *)
+
+
+(* Definition Hoare i P Q := *)
+(*   forall s m1, *)
+(*   P s m1 -> *)
+(*   match step_fun i s m1 with *)
+(*     | None => True *)
+(*     | Some(pgm',s',m') => Q s' m' *)
+(*   end. *)
+
+(* Lemma eval_loop body i s m1 f P Q : *)
+(*   Hoare (LOOP body) P Q -> *)
+(*   P s m1 -> *)
+(*   evaluate ((LOOP body)) *)
+
+(* Lemma factorial_correct m1 (n : nat) : evaluate factorial_program [::Int64 (Z.of_nat n)] m1 ((5 * n).+4.+4.+4.+2) = Some([::Int64 (Z.of_nat (factorial n))],m1). *)
+(* Proof. *)
+(* case: n => [|n]; first by []. *)
+(* rewrite /= . *)
+(* rewrite eval_assoc. *)
+(* rewrite eval_nop. *)
+
+(*         rewrite addnA. *)
+(* elim: n => [|n Hn]. *)
+(* - by []. *)
+(* - rewrite /= . *)
+
+(* Lemma loop_invariant :   evaluate *)
+(*     ((NOP;; *)
+(*       LOOP {{DUP;; (DIP {{MUL}});; PUSH Int64 1;; SWAP;; SUB;; DUP;; NEQ}});; *)
+(*      DROP) (b ;; In) *)
+
+
+
 
 (* these lemmas need to be reformulated *)
 
