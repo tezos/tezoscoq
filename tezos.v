@@ -804,7 +804,6 @@ Qed.
 Lemma factorial_correct_eval m1 (n : nat) : evaluates (Some(factorial_program, [::Int64 (n%:Z)],m1)) (Some(Nop,[::Int64 ((factorial n)%:Z)],m1)).
 Proof.
 do 4 apply: evaluates_onestep => /= .
-
 apply: evaluates_if; case Hn : n => [|n1] // .
 - move => _.
   apply evaluates_onestep => /= .
@@ -833,23 +832,20 @@ apply: evaluates_if; case Hn : n => [|n1] // .
   apply: (@evaluates_seq _ _ _ _ _ ([::Int64 0; Int64 ((n1.+1)`!)%:Z])); last first => // .
     by apply: evaluates_onestep => /= ; exists 0%N.
   (* Generalize the goal a little bit. *)
-  enough (forall N acc, acc * (Posz (factorial n)) = factorial N ->
+  suff {Hn n1} H  : (forall N acc, acc * (Posz (factorial n)) = factorial N ->
     evaluates (Some (LOOP {{body}}, [:: get_neq (Int64 n); Int64 n; Int64 acc], m1))
       (Some (NOP, [:: Int64 0; Int64 N`!], m1))).
-  { specialize (H n 1).
+    specialize (H n 1).
     replace Dtrue with (get_neq (Int64 n)) by by subst.
-    rewrite <- Hn. apply H. apply mul1r. }
-  clear Hn n1.
+    rewrite -Hn; apply: H; apply: mul1r.
   elim n; intros.
   apply: evaluates_onestep => /= . rewrite -H fact0 mulr1. by exists 0%N.
   apply: (@evaluates_trans _ (Some(_,[::_;_;_],_))).
   apply: Hsuff => // .
   specialize (H N (Posz n0.+1 * acc)).
-  replace (Posz n0.+1 - 1) with (Posz n0).
-  apply H.
+  have -> : (Posz n0.+1 - 1) = (Posz n0) by rewrite intS -addrAC subrr add0r.
+  apply: H.
   by rewrite -H0 factS PoszM mulrCA mulrA.
-  rewrite intS.
-  by rewrite -addrAC subrr add0r.
 Qed.
 
 End Path.
