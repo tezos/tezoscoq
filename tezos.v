@@ -667,6 +667,10 @@ Proof.
 by exists 1%N; rewrite evaluate_1.
 Qed.
 
+Lemma evaluates_self st : evaluates st st.
+Proof.
+ by exists 0%N.
+Qed.
 
 Lemma evaluates_trans st2 st1 st3 :
   evaluates st1 st2 ->
@@ -809,7 +813,7 @@ apply: evaluates_if; case Hn : n => [|n1] // .
   apply evaluates_onestep => /= .
   apply evaluates_onestep => /= .
   apply evaluates_onestep => /= .
-  by exists 0%N.
+  exact: evaluates_self.
 - move => _.
   do 8 apply evaluates_onestep => /= .
   set body := (X in evaluates (Some(LOOP {{ X }} ;; _,_,_)) _) .
@@ -838,14 +842,12 @@ apply: evaluates_if; case Hn : n => [|n1] // .
     specialize (H n 1).
     replace Dtrue with (get_neq (Int64 n)) by by subst.
     rewrite -Hn; apply: H; apply: mul1r.
-  elim n; intros.
-  apply: evaluates_onestep => /= . rewrite -H fact0 mulr1. by exists 0%N.
-  apply: (@evaluates_trans _ (Some(_,[::_;_;_],_))).
-  apply: Hsuff => // .
-  specialize (H N (Posz n0.+1 * acc)).
+  elim: n => [|n0 HIn] N acc H.
+    by apply: evaluates_onestep => /= ; rewrite -H fact0 mulr1; exact: evaluates_self.
+  apply: (@evaluates_trans _ (Some(_,[::_;_;_],_))); first exact: Hsuff.
+  specialize (HIn N (Posz n0.+1 * acc)).
   have -> : (Posz n0.+1 - 1) = (Posz n0) by rewrite intS -addrAC subrr add0r.
-  apply: H.
-  by rewrite -H0 factS PoszM mulrCA mulrA.
+  apply: HIn; by rewrite -H factS PoszM mulrCA mulrA.
 Qed.
 
 End Path.
