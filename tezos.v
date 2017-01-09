@@ -704,13 +704,16 @@ case Hi1 : i1 => // .
 Qed.
 
 
-(* Lemma evaluates_weaken i1 i2 s s1 m m1 : *)
-(*   evaluates (Some(i1,s,m)) (Some(Nop,s1,m1)) -> *)
-(*   evaluates (Some(i1;;i2,s,m)) (Some(i2,s1,m1)). *)
-(* Proof. *)
-(* move => [f Hf]. *)
-(* move: Hf. *)
-(* move: i1 i2 s s1 m m1. *)
+Lemma evaluates_weaken i1 i2 s s1 m m1 :
+  evaluates (Some(i1,s,m)) (Some(Nop,s1,m1)) ->
+  evaluates (Some(i1;;i2,s,m)) (Some(i2,s1,m1)).
+Proof.
+move => [f Hf].
+move: Hf.
+move: i1 i2 s s1 m m1.
+(* this is harder than it looks at first. *)
+(* maybe build a list from instructions and then reason on the length of the list?*)
+Admitted.
 (* elim: f => [|f Hind ] i1 i2 s s1 m m1. *)
 (* - by move => [] -> -> ->; exists 1%nat; rewrite /=. *)
 (* - move => Hstep. *)
@@ -746,7 +749,6 @@ exists f.+1.
 by rewrite evaluate_Sr.
 Qed.
 
-
 Lemma evaluates_seq i1 i2 i3 s m s1 s2 m1 m2:
   i1 <> NOP ->
   evaluates (Some(i1,s,m)) (Some(Nop,s1,m1)) ->
@@ -755,18 +757,10 @@ Lemma evaluates_seq i1 i2 i3 s m s1 s2 m1 m2:
 Proof.
 (* move => [f1 Hev1] [f2 Hev2]. *)
 move => Hi1 Hev1 Hev2.
-elim: Hev1 => f1 Hev1.
-Admitted. (* TODO, seems reasonable *)
-
-(* apply: evaluates_onestep. *)
-(* erewrite ostep_fun_weaken_nop => // . *)
-(* apply: evaluates_onestep; exact: Hev2. *)
-(* apply: Hev1. *)
-(* apply: evaluates_trans; last exact: Hev2. *)
-(* exact: evaluates_weaken. *)
-(* Qed. *)
-
-
+apply: evaluates_trans.
+apply: evaluates_weaken; exact: Hev1.
+exact: Hev2.
+Qed.
 
 Lemma evaluatesEq st1 st2 : evaluates st1 st2 <-> exists f, evaluate f st1 = st2.
 Proof.
