@@ -827,21 +827,36 @@ apply: evaluates_if; case Hn : n => [|n1] // .
       evaluates ((Some(LOOP {{ body }},[:: b; Int64 z; Int64 zacc],m1))) (Some(LOOP {{body}},[:: b1 ; Int64 (z-1)%Z; Int64 (z*zacc)],m1)).
     move =>  H1 H2 H3.
     apply: evaluates_onestep => /= .
-    have -> : b = Dtrue by admit.
+    have -> : b = Dtrue.
+    { subst. simpl. replace (z != 0) with true; auto.
+      symmetry. apply/negP. intro.
+      move: H=> /eqP H; rewrite H in H1.
+      inversion H1. }
     do 14 apply: evaluates_onestep => /= .
     exists 0%N => /= .
     congr (Some _);congr(_,_,_);congr([::_;_;_]).
     by rewrite H3.
   apply: (@evaluates_seq _ _ _ _ _ ([::Int64 0; Int64 ((n1.+1)`!)%:Z])); last first => // .
     by apply: evaluates_onestep => /= ; exists 0%N.
-  apply: (@evaluates_trans _ (Some(_,[::_;_;_(* Int64 (z - 1);Int64 z *)],_))).
+  (* Generalize the goal a little bit. *)
+  enough (forall N acc, acc * (Posz (factorial n)) = factorial N ->
+    evaluates (Some (LOOP {{body}}, [:: get_neq (Int64 n); Int64 n; Int64 acc], m1))
+      (Some (NOP, [:: Int64 0; Int64 N`!], m1))).
+  { specialize (H n 1).
+    replace Dtrue with (get_neq (Int64 n)) by by subst.
+    rewrite <- Hn. apply H. apply mul1r. }
+  clear Hn n1.
+  elim n; intros.
+  apply: evaluates_onestep => /= . rewrite -H fact0 mulr1. by exists 0%N.
+  apply: (@evaluates_trans _ (Some(_,[::_;_;_],_))).
   apply: Hsuff => // .
-
-  (* elim: n1 Hn. *)
-  (* move => _. *)
-  (* apply Hsuff. => /=. *)
-
-Abort.
+  specialize (H N (Posz n0.+1 * acc)).
+  replace (Posz n0.+1 - 1) with (Posz n0).
+  apply H.
+  by rewrite -H0 factS PoszM mulrCA mulrA.
+  rewrite intS.
+  by rewrite -addrAC subrr add0r.
+Qed.
 
 End Path.
 
