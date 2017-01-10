@@ -624,6 +624,13 @@ Proof.
 by rewrite /evaluate; rewrite iterSr.
 Qed.
 
+Lemma evaluate_None f : evaluate f None = None.
+Proof.
+elim f => [|f' IH].
+done.
+simpl. by rewrite IH.
+Qed.
+
 Definition evaluate_trace state := traject ostep_fun state.
 
 Definition evaluates state1 state2 := exists f, evaluate f state1 = state2.
@@ -685,6 +692,143 @@ rewrite /evaluate addnC iter_add.
 by move => -> ->.
 Qed.
 
+(* "minimal" evaluation when an instruction evaluates to NOP at some point. *)
+Lemma evaluate_to_NOP i s m s' m' :
+  i <> NOP ->
+  evaluates (Some (i, s, m)) (Some (NOP, s', m')) ->
+  exists f i0 s0 m0,
+    evaluate f (Some (i, s, m)) = Some (i0, s0, m0) /\
+    i0 <> NOP /\ ostep_fun (Some (i0, s0, m0)) = (Some (NOP, s', m')).
+Proof.
+  move => Hi [f Hev].
+  enough (forall (n : nat), (n < f)%N ->
+    (forall i0 s0 m0,
+      evaluate (f - n.+1) (Some (i, s, m)) = Some (i0, s0, m0) -> i0 <> NOP) ->
+    exists (f0 : nat) (i0 : instr) (s0 : stack) (m0 : memory),
+  evaluate f0 (Some (i, s, m)) = Some (i0, s0, m0) /\
+  i0 <> NOP /\ ostep_fun (Some (i0, s0, m0)) = Some (NOP, s', m')).
+  { destruct f.
+    inversion Hev; subst; by elim Hi.
+    apply (H f). trivial.
+    intros. rewrite subnn in H0. inversion H0. by subst. }
+  induction n; intros.
+  { destruct f.
+    inversion Hev; subst; by elim Hi.
+    exists f.
+    remember (evaluate f (Some (i, s, m))).
+    destruct o as [[[i0 s0] m0]|].
+    exists i0, s0, m0. repeat split.
+    refine (H0 i0 s0 m0 _).
+    rewrite subn1. by symmetry.
+    simpl in Hev. by rewrite -Heqo in Hev.
+    simpl in Hev. rewrite -Heqo in Hev. inversion Hev. }
+  remember (evaluate (f - n.+1) (Some (i, s, m))).
+  destruct o as [[[i0 s0] m0]|]; swap 1 2.
+  { assert (f = f - n.+1 + n.+1)%N. rewrite subnK; auto.
+    rewrite H1 in Hev.
+    erewrite eval_comp in Hev; [|reflexivity|reflexivity].
+    rewrite -Heqo evaluate_None in Hev. inversion Hev. }
+  have: forall i, (i = NOP) \/ (i <> NOP) => [|Hdec].
+  { move => i'; case i'; (try by left); intros; right; intro Contra; inversion Contra. }
+  case: (Hdec i0) => [Heq|Hi0].
+  { exists (f - n.+1 - 1)%N.
+  remember (evaluate (f - n.+1 - 1) (Some (i, s, m))).
+  destruct o as [[[i1 s1] m1]|]; swap 1 2.
+  { assert (f = (f - n.+1 - 1 + (n.+1 + 1)))%N. rewrite -subnDA subnK; auto. by rewrite addn1.
+    rewrite H1 in Hev.
+    erewrite eval_comp in Hev; [|reflexivity|reflexivity].
+    rewrite -Heqo0 evaluate_None in Hev. inversion Hev. }
+  exists i1, s1, m1. repeat split.
+  refine (H0 i1 s1 m1 _). rewrite Heqo0. f_equal. by rewrite -subnDA addn1.
+  subst.
+  assert (f = f - n.+1 + n.+1)%N. rewrite subnK; auto.
+  rewrite H1 in Hev.
+  erewrite eval_comp in Hev; [|reflexivity|reflexivity].
+  rewrite -Heqo in Hev.
+  rewrite Heqo0. rewrite -evaluate_S.
+  assert ((f - n.+1 - 1).+1 = (f - n.+1))%N. rewrite subnSK. by rewrite subn0.
+  replace O with (n.+1 - n.+1)%N.
+  by apply ltn_sub2r.
+  by rewrite subnn.
+  rewrite H2 - Heqo.
+  revert Hev. clear.
+  induction n; intros.
+  inversion Hev; by subst.
+  rewrite evaluate_Sr in Hev. unfold ostep_fun, step_fun in Hev.
+  auto. }
+  (* Recursive case. *)
+  apply IHn.
+  auto.
+  intros. inversion H1; by subst.
+Qed.
+
+Lemma evaluate_trace_rect_aux
+  (i' : instr) (s' : stack) (m' : memory)
+  (P : instr -> stack -> memory -> Prop)
+  (H0 : P i' s' m')
+  (HS : forall i s m i0 s0 m0,
+    i <> NOP ->
+    evaluates (Some (i, s, m)) (Some (i', s', m')) ->
+    ostep_fun (Some (i, s, m)) = Some (i0, s0, m0) ->
+    P i0 s0 m0 -> P i s m) :
+  forall i s m, i <> NOP -> i' <> NOP -> evaluates (Some (i, s, m)) (Some (i', s', m')) ->
+  P i s m.
+Proof.
+  move => i s m Hi Hneq [f Hev].
+  revert i s m Hi Hev.
+  induction f; intros.
+  { by inversion_clear Hev. }
+  rewrite evaluate_Sr in Hev.
+  remember (ostep_fun (Some (i, s, m))) as st.
+  destruct st as [[[i0 s0] m0]|]; swap 1 2.
+  { rewrite evaluate_None in Hev. inversion Hev. }
+  have: i0 <> NOP => [|Hi0].
+  { intro. subst. apply Hneq.
+    revert Hev; clear.
+    induction f; intros. by inversion Hev.
+    apply IHf. by rewrite evaluate_Sr in Hev. }
+  specialize (IHf i0 s0 m0 Hi0 Hev).
+  refine (HS _ _ _ _ _ _ Hi _ _ IHf).
+  apply: evaluates_trans.
+  exists 1%N. symmetry. exact Heqst.
+  by exists f%N.
+  by symmetry.
+Qed.
+
+Theorem evaluate_trace_rect
+  (i' : instr) (s' : stack) (m' : memory)
+  (P : instr -> stack -> memory -> Prop)
+  (H0 : P i' s' m')
+  (HS : forall i s m i0 s0 m0,
+    i <> NOP ->
+    evaluates (Some (i, s, m)) (Some (i', s', m')) ->
+    ostep_fun (Some (i, s, m)) = Some (i0, s0, m0) ->
+    P i0 s0 m0 -> P i s m) :
+  forall i s m, evaluates (Some (i, s, m)) (Some (i', s', m')) ->
+  P i s m.
+Proof.
+  intros.
+  have: forall i, (i = NOP) \/ (i <> NOP) => [|Hdec].
+  { move => i0; case i0; (try by left); intros; right; intro Contra; inversion Contra. }
+  case: (Hdec i) => [Heq|Hi].
+  { subst. elim H => [f Hev].
+    induction f.
+      simpl in Hev. inversion Hev; by subst.
+      rewrite evaluate_Sr in Hev.
+      by apply IHf. }
+  case: (Hdec i') => [Heq|Hi'].
+  { subst. destruct (evaluate_to_NOP Hi H) as [f [i0 [s0 [m0 [Hev [Hi0 Hev0]]]]]].
+    refine (evaluate_trace_rect_aux P _ _ Hi Hi0 _).
+    apply (HS i0 s0 m0 NOP s' m'); trivial. by exists 1%N.
+    intros.
+    refine (HS _ _ _ _ _ _ H1 _ _ H4).
+    apply: evaluates_trans. exact H2. by exists 1%N.
+    trivial.
+    by exists f. }
+  apply: evaluate_trace_rect_aux. exact H0.
+  all: done.
+Qed.
+
 Lemma ostep_fun_weaken_twosteps i1 i2 s s1 m m1 :
   i1 <> Nop ->
   ostep_fun (Some(i1,s,m)) = (Some(Nop,s1,m1)) ->
@@ -696,53 +840,16 @@ case: (step_fun i1 s m) => [[[i' s' ] m'] |] // [] -> -> -> /=.
 case Hi1 : i1 => // .
 Qed.
 
-Lemma ostep_fun_weaken_nop i1 i2 s s1 m m1 :
+Lemma ostep_fun_weaken i1 i1' i2 s s1 m m1 :
   i1 <> Nop ->
-  ostep_fun (Some(i1,s,m)) = (Some(Nop,s1,m1)) ->
-  (ostep_fun (Some(i1;;i2,s,m))) = (Some(NOP;;i2,s1,m1)).
+  ostep_fun (Some(i1,s,m)) = (Some(i1',s1,m1)) ->
+  (ostep_fun (Some(i1;;i2,s,m))) = (Some(i1';;i2,s1,m1)).
 Proof.
 move => Hi1.
 rewrite /=.
 case: (step_fun i1 s m) => [[[i' s' ] m'] |] // [] -> -> -> /=.
 case Hi1 : i1 => // .
 Qed.
-
-
-Lemma evaluates_weaken i1 i2 s s1 m m1 :
-  evaluates (Some(i1,s,m)) (Some(Nop,s1,m1)) ->
-  evaluates (Some(i1;;i2,s,m)) (Some(i2,s1,m1)).
-Proof.
-move => [f Hf].
-move: Hf.
-move: i1 i2 s s1 m m1.
-(* this is harder than it looks at first. *)
-(* maybe build a list from instructions and then reason on the length of the list?*)
-Admitted.
-(* elim: f => [|f Hind ] i1 i2 s s1 m m1. *)
-(* - by move => [] -> -> ->; exists 1%nat; rewrite /=. *)
-(* - move => Hstep. *)
-(*   apply: evaluates_trans. *)
-(*   apply: evaluates_step_fun. *)
-(*   rewrite /= . *)
-(*   case Hi1 : i1 => // . *)
-(*   case step_fun. *)
-(*   move => [[p1 p2] p3] /=. *)
-(* apply Hind. *)
-
-(* exists f.+1. *)
-
-(*   move => Hstep. *)
-(*   apply: evaluates_trans. *)
-(*     exact: evaluates_step_fun. *)
-(*   rewrite /=. *)
-(*   rewrite 2!evaluate_Sr /= . *)
-(*   case: (step_fun i1 s m) => [[[i' s'] m']|]. *)
-
-(*   move => i i0. *)
-(* (* (* intentionally failing Qed *) *) *)
-(* (* Qed. *) *)
-(* Admitted. *)
-
 
 Lemma evaluates_onestep st1 st2 :
   evaluates (ostep_fun st1) st2 ->
@@ -753,17 +860,30 @@ exists f.+1.
 by rewrite evaluate_Sr.
 Qed.
 
+Lemma evaluates_weaken i1 i1' i2 s s1 m m1 :
+  evaluates (Some(i1,s,m)) (Some(i1',s1,m1)) ->
+  evaluates (Some(i1;;i2,s,m)) (Some(i1';;i2,s1,m1)).
+Proof.
+move => Hev1.
+refine (evaluate_trace_rect (fun i s m =>
+  evaluates (Some (i;; i2, s, m)) _) _ _ Hev1).
+by exists 0%N.
+intros.
+apply: evaluates_onestep.
+by rewrite (ostep_fun_weaken _ _ _ _ H1).
+Qed.
+
 Lemma evaluates_seq i1 i2 i3 s m s1 s2 m1 m2:
-  i1 <> NOP ->
   evaluates (Some(i1,s,m)) (Some(Nop,s1,m1)) ->
   evaluates (Some(i2,s1,m1)) (Some(i3,s2,m2)) ->
   evaluates (Some(i1;;i2,s,m)) (Some(i3,s2,m2)).
 Proof.
 (* move => [f1 Hev1] [f2 Hev2]. *)
-move => Hi1 Hev1 Hev2.
+move => Hev1 Hev2.
+apply: evaluates_trans; last exact: Hev2.
 apply: evaluates_trans.
-apply: evaluates_weaken; exact: Hev1.
-exact: Hev2.
+apply: evaluates_weaken => //; exact: Hev1.
+by exists 1%N.
 Qed.
 
 Lemma evaluatesEq st1 st2 : evaluates st1 st2 <-> exists f, evaluate f st1 = st2.
@@ -939,7 +1059,7 @@ End Path.
 
 Variable m : memory.
 
-Eval native_compute in evaluate 1000 (Some(factorial_program,[::Int64 66],m)).
+Eval native_compute in evaluate 1000 (Some(factorial_program,[::Int64 6],m)).
 Eval native_compute in evaluate_trace (Some(factorial_program,[::Int64 5],m)) 100 .
 Eval native_compute in step_fun (DROP ;; DROP) [::Int8 1;Int8 1] m.
 Eval compute in step_fun (NOP ;; DROP) [::Int8 1] m.
