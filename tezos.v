@@ -87,6 +87,7 @@ Section Instructions.
 
 Inductive instr :=
 | Seq : instr -> instr -> instr
+| Done : instr
 | Nop : instr
 | If : instr -> instr -> instr
 | Loop : instr -> instr
@@ -111,6 +112,7 @@ End Instructions.
 (* Notations don't survive the end of section:
    that's why they are here *)
 Notation "c1 ';;' c2" := (Seq c1 c2) (at level 80, right associativity).
+Notation "'DONE'" := (Done).
 Notation "'NOP'" := (Nop).
 Notation "'IFB' '{{' bt '}}' '{{' bf '}}'" := (If bt bf) (at level 80, right associativity).
 Notation "'LOOP' '{{' body '}}'" := (Loop body) (at level 80, right associativity).
@@ -119,6 +121,7 @@ Notation "'DROP'" := (Drop).
 Notation "'DUP'" := (Dup).
 Notation "'SWAP'" := (Swap).
 Notation "'PUSH' x" := (Push x) (at level 35).
+Notation "'PAIR'" := (Pair).
 Notation "'EQ'" := (Eq).
 Notation "'NEQ'" := (Neq).
 Notation "'LT'" := (Lt).
@@ -156,6 +159,9 @@ with type :=
 | t_int64 : type
 (*| t_void : type*)
 | t_bool : type
+| t_pair : type -> type -> type
+(* to avoid recursion, might be a good idea to
+   separate primitive types from non-primitive ones *)
 (*| t_string : type*)
 (*| t_tez : tez -> type*)
 (*| t_contract : type -> type -> type*)
@@ -200,6 +206,8 @@ Inductive has_instr_type : instr -> instr_type -> Prop :=
     i2 :i: (Sc --> Sd) ->
     (Sa --> Sb) <o> (Sc --> Sd) === (Sx --> Sy) ->
     (i1 ;; i2) :i: (Sx --> Sy)
+| IT_Done :
+    DONE :i: ([] --> [])
 | IT_Nop :
     NOP :i: ([] --> [])
 | IT_Drop : forall t,
@@ -211,6 +219,8 @@ Inductive has_instr_type : instr -> instr_type -> Prop :=
 | IT_Push : forall v t,
     has_data_type v t ->
     PUSH v :i: ([] --> [ t ])
+| IT_Pair : forall t1 t2,
+    PAIR :i: ([t1 ; t2] --> [ t_pair t1 t2 ])
 | IT_Dip : forall t code Sa Sb,
     code :i: (Sa --> Sb) ->
     (DIP {{ code }}) :i: (t :: Sa --> t :: Sb)
@@ -439,12 +449,13 @@ Definition get_sub (x : tagged_data) (y : tagged_data) : option tagged_data :=
 
 Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack * memory) :=
   match i with
-  | Nop ;; i2 => Some(i2,s,m)
+  | Done ;; i2 => Some(i2,s,m)
   | i1 ;; i2 => if step_fun i1 s m is Some(i,s',m') then
                    Some(i;;i2,s',m')
                  else
                    None
-  | Nop => Some(Nop,s,m)
+  | Done => None
+  | Nop => Some(Done,s,m)
   | If bt bf => if s is x::s then
                  match x with
                    | Dtrue => Some(bt,s,m)
@@ -454,7 +465,7 @@ Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack *
   | Loop body => if s is x::s then
                   match x with
                   | Dtrue => Some(body ;;(Loop body),s,m)
-                  | Dfalse => Some(Nop,s,m) (* doubtful *)
+                  | Dfalse => Some(Done,s,m) (* doubtful *) (* is it less doubtful with Done *)
                   | _ => None
                   end else None
   | Dip i1 => if s is x::s then
@@ -462,42 +473,42 @@ Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack *
                        | Some (i2,s',m') => Some(i2,x::s',m')
                        | None => None
                      end else None
-  | Drop => if s is x::xs then Some(Nop,xs,m) else None
-  | Dup => if s is x::xs then Some(Nop,x::x::xs,m) else None
-  | Swap => if s is x1::x2::s then Some(Nop,x2::x1::s,m) else None
-  | Push d => Some(Nop,d::s,m)
-  | Pair => if s is a::b::s then Some(Nop,(DPair a b)::s,m) else None
-  | Eq => if s is x::s then if is_comparable x then Some(Nop,((get_eq x))::s,m) else None else None
-  | Neq => if s is x::s then if is_comparable x then Some(Nop,((get_neq x))::s,m) else None else None
-  | Lt => if s is x::s then if is_comparable x then Some(Nop,(Int64 (get_lt x))::s,m) else None else None
+  | Drop => if s is x::xs then Some(Done,xs,m) else None
+  | Dup => if s is x::xs then Some(Done,x::x::xs,m) else None
+  | Swap => if s is x1::x2::s then Some(Done,x2::x1::s,m) else None
+  | Push d => Some(Done,d::s,m)
+  | Pair => if s is a::b::s then Some(Done,(DPair a b)::s,m) else None
+  | Eq => if s is x::s then if is_comparable x then Some(Done,((get_eq x))::s,m) else None else None
+  | Neq => if s is x::s then if is_comparable x then Some(Done,((get_neq x))::s,m) else None else None
+  | Lt => if s is x::s then if is_comparable x then Some(Done,(Int64 (get_lt x))::s,m) else None else None
   | Not => if s is x::s then match x with
-                              | Dtrue => Some(Nop,Dfalse::s,m)
-                              | Dfalse => Some(Nop,Dtrue::s,m)
+                              | Dtrue => Some(Done,Dfalse::s,m)
+                              | Dfalse => Some(Done,Dtrue::s,m)
                               | _ => None
                             end else None
   | And => if s is x1::x2::s then
             if (is_bool x1 && is_bool x2) then
               match (x1,x2) with
-                | (Dtrue,Dtrue) => Some(Nop,Dtrue::s,m)
-                | (_,_) => Some(Nop,Dfalse::s,m)
+                | (Dtrue,Dtrue) => Some(Done,Dtrue::s,m)
+                | (_,_) => Some(Done,Dfalse::s,m)
               end else None
           else None
   | Or => if s is x1::x2::s then
             if (is_bool x1 && is_bool x2) then
               match (x1,x2) with
-                | (Dtrue,_) => Some(Nop,Dtrue::s,m)
-                | (_,Dtrue) => Some(Nop,Dtrue::s,m)
-                | (_,_) => Some(Nop,Dfalse::s,m)
+                | (Dtrue,_) => Some(Done,Dtrue::s,m)
+                | (_,Dtrue) => Some(Done,Dtrue::s,m)
+                | (_,_) => Some(Done,Dfalse::s,m)
               end else None
           else None
   | Mul => if s is x1::x2::s then
             match (get_mul x1 x2) with
-              | Some(x12) => Some(Nop,x12::s,m)
+              | Some(x12) => Some(Done,x12::s,m)
               | None => None
           end else None
   | Sub => if s is x1::x2::s then
             match (get_sub x1 x2) with
-              | Some(x12) => Some(Nop,x12::s,m)
+              | Some(x12) => Some(Done,x12::s,m)
               | None => None
           end else None
 
@@ -505,7 +516,7 @@ end.
 
 
 Lemma step_fun_seq : forall i1 i2 s m,
-  step_fun (i1 ;; i2) s m = if i1 is NOP then Some(i2,s,m) else if step_fun i1 s m is Some(i,s',m') then
+  step_fun (i1 ;; i2) s m = if i1 is Done then Some(i2,s,m) else if step_fun i1 s m is Some(i,s',m') then
                    Some(i;;i2,s',m')
                  else
                    None.
@@ -602,7 +613,7 @@ Definition ostep_fun state :=
     | Some(i,s,m) => step_fun i s m
   end.
 
-Lemma ostep_fun_Nop i2 s m : ostep_fun (ostep_fun (Some(NOP;;i2,s,m))) = ostep_fun (Some(i2,s,m)).
+Lemma ostep_fun_Done i2 s m : ostep_fun (ostep_fun (Some(Done;;i2,s,m))) = ostep_fun (Some(i2,s,m)).
 Proof.
 by [].
 Qed.
@@ -646,7 +657,7 @@ Definition proj (st : option (instr*stack*memory)) : option (stack * memory) :=
 
 Lemma ostep_fun_seq i1 i2 s m :
   ostep_fun (Some(i1;;i2,s,m)) =
-  if i1 is Nop then Some(i2,s,m) else
+  if i1 is Done then Some(i2,s,m) else
   if ostep_fun (Some(i1,s,m)) is
   Some(i,s',m') then Some(i;;i2,s',m')
   else None.
@@ -677,14 +688,14 @@ move: Hf1 Hf2.
 rewrite /evaluate addnC iter_add.
 by move => -> ->.
 Qed.
-
+(*
 (* "minimal" evaluation when an instruction evaluates to NOP at some point. *)
 Lemma evaluate_to_NOP i s m s' m' :
-  i <> NOP ->
-  evaluates (Some (i, s, m)) (Some (NOP, s', m')) ->
+  i <> Done ->
+  evaluates (Some (i, s, m)) (Some (Done, s', m')) ->
   exists f i0 s0 m0,
     evaluate f (Some (i, s, m)) = Some (i0, s0, m0) /\
-    i0 <> NOP /\ ostep_fun (Some (i0, s0, m0)) = (Some (NOP, s', m')).
+    i0 <> Done /\ ostep_fun (Some (i0, s0, m0)) = (Some (Done, s', m')).
 Proof.
   move => Hi [f Hev].
   suff H : (forall (n : nat), (n < f)%N ->
@@ -747,28 +758,38 @@ Proof.
   auto.
   intros. inversion H1; by subst.
 Qed.
-
+*)
+(*
 Lemma evaluate_trace_rect_aux
   (i' : instr) (s' : stack) (m' : memory)
   (P : instr -> stack -> memory -> Prop)
   (H0 : P i' s' m')
   (HS : forall i s m i0 s0 m0,
-    i <> NOP ->
     evaluates (Some (i, s, m)) (Some (i', s', m')) ->
     ostep_fun (Some (i, s, m)) = Some (i0, s0, m0) ->
     P i0 s0 m0 -> P i s m) :
-  forall i s m, i <> NOP -> i' <> NOP -> evaluates (Some (i, s, m)) (Some (i', s', m')) ->
+  forall i s m, evaluates (Some (i, s, m)) (Some (i', s', m')) ->
   P i s m.
 Proof.
-  move => i s m Hi Hneq [f Hev].
-  revert i s m Hi Hev.
+  move => i s m [f Hev].
+  revert i s m Hev.
   induction f; intros.
-  { by inversion_clear Hev. }
-  rewrite evaluate_Sr in Hev.
   remember (ostep_fun (Some (i, s, m))) as st.
   destruct st as [[[i0 s0] m0]|]; swap 1 2.
-  { rewrite evaluate_None in Hev. inversion Hev. }
-  have: i0 <> NOP => [|Hi0].
+  simpl in Hev. inversion Hev.
+  assumption.
+simpl in Hev. inversion Hev.
+  assumption.
+  rewrite evaluate_Sr in Hev.
+  assert (exists i0 s0 m0, ostep_fun (Some (i, s, m)) = Some (i0, s0, m0)).
+  induction f. case_eq (ostep_fun (Some (i, s, m))).
+  intros. econstructor. congruence. eauto. simpl in Hev.
+  case_eq i.
+  intro H. rewrite H in Hev. simpl in Hev.
+  rewrite evaluate_None in Hev.
+  inversion Hev.
+  intros. simpl.  eauto. 
+  
   { intro. subst. apply Hneq.
     revert Hev; clear.
     induction f; intros. by inversion Hev.
@@ -780,13 +801,15 @@ Proof.
   by exists f%N.
   by symmetry.
 Qed.
+*)
 
+(*
 Theorem evaluate_trace_rect
   (i' : instr) (s' : stack) (m' : memory)
   (P : instr -> stack -> memory -> Prop)
   (H0 : P i' s' m')
   (HS : forall i s m i0 s0 m0,
-    i <> NOP ->
+    (*i <> NOP ->*)
     evaluates (Some (i, s, m)) (Some (i', s', m')) ->
     ostep_fun (Some (i, s, m)) = Some (i0, s0, m0) ->
     P i0 s0 m0 -> P i s m) :
@@ -794,7 +817,7 @@ Theorem evaluate_trace_rect
   P i s m.
 Proof.
   intros.
-  have: forall i, (i = NOP) \/ (i <> NOP) => [|Hdec].
+  have: forall i, (i = Done) \/ (i <> Done) => [|Hdec].
   { move => i0; case i0; (try by left); intros; right; intro Contra; inversion Contra. }
   case: (Hdec i) => [Heq|Hi].
   { subst. elim H => [f Hev].
@@ -814,26 +837,50 @@ Proof.
   apply: evaluate_trace_rect_aux. exact H0.
   all: done.
 Qed.
+*)
+Lemma ostep_discr: forall i1 i2 s m s1 m1,
+  ostep_fun (Some(i1,s,m)) = (Some(i2,s1,m1)) ->
+  i1 <> Done.
+Proof.
+move => i1 i2 s m s1 m1 H.
+destruct i1; simpl ;simpl in H; congruence.
+Qed.
 
 Lemma ostep_fun_weaken_twosteps i1 i2 s s1 m m1 :
-  i1 <> Nop ->
-  ostep_fun (Some(i1,s,m)) = (Some(Nop,s1,m1)) ->
+  (*i1 <> Done ->*)
+  ostep_fun (Some(i1,s,m)) = (Some(Done(*Nop*),s1,m1)) ->
   ostep_fun (ostep_fun (Some(i1;;i2,s,m))) = (Some(i2,s1,m1)).
 Proof.
-move => Hi1 /=.
+intro H.
+generalize (ostep_discr) ; intro Discr.
+generalize (Discr _ _ _ _ _ _ H).
+assert (Hi1: i1 <>Done).
+simpl in H.
+destruct i1; simpl ;simpl in H; congruence.
+(*move => Hi1 /=.*)
+generalize H; clear H.
+simpl.
 case: (step_fun i1 s m) => [[[i' s' ] m'] |] // [] -> -> -> /=.
 by case Hi1 : i1 => // .
 Qed.
 
+
+(* This lemma is true but not used currently *)
 Lemma ostep_fun_weaken i1 i1' i2 s s1 m m1 :
-  i1 <> Nop ->
+  (*i1 <> Nop ->*)
   ostep_fun (Some(i1,s,m)) = (Some(i1',s1,m1)) ->
   (ostep_fun (Some(i1;;i2,s,m))) = (Some(i1';;i2,s1,m1)).
 Proof.
+intro H.
+generalize (ostep_discr) ; intro Discr.
+generalize (Discr _ _ _ _ _ _ H); clear Discr.
 move => Hi1 /=.
+generalize H; clear H.
+simpl.
 case: (step_fun i1 s m) => [[[i' s' ] m'] |] // [] -> -> -> /=.
 by case Hi1 : i1 => // .
 Qed.
+
 
 Lemma evaluates_onestep st1 st2 :
   evaluates (ostep_fun st1) st2 ->
@@ -842,21 +889,52 @@ Proof.
 by move => [f Hf]; exists f.+1 ;rewrite evaluate_Sr.
 Qed.
 
-Lemma evaluates_weaken i1 i1' i2 s s1 m m1 :
+Lemma evaluates_weaken: forall i1 i1' i2 s s1 m m1,
   evaluates (Some(i1,s,m)) (Some(i1',s1,m1)) ->
   evaluates (Some(i1;;i2,s,m)) (Some(i1';;i2,s1,m1)).
 Proof.
-move => Hev1.
-refine (evaluate_trace_rect (fun i s m =>
-  evaluates (Some (i;; i2, s, m)) _) _ _ Hev1).
-  exact: evaluates_self.
-move => i s0 m0 i0 s2 m2 HiNOP Hevi Histep Hevseq.
-apply: evaluates_onestep.
-by rewrite (ostep_fun_weaken _ _ _ _ Histep).
+intros.
+destruct H as [f].
+generalize i1 i1' i2 s s1 m m1 H; clear i1 i1' i2 s s1 m m1 H.
+induction f.
+intros.
+simpl in H.
+unfold evaluates.
+exists O.
+simpl. congruence. 
+
+intros. 
+rewrite evaluate_Sr in H.
+assert (A: exists i3 s3 m3, ostep_fun (Some (i1, s, m)) = (Some(i3,s3,m3))).
+
+Focus 2.
+destruct A as [i3 [s3 [m3 A]]].
+rewrite A in H.
+generalize (IHf _ _ i2 _ _ _ _ H).
+intro B.
+destruct B as [g B].
+exists g.+1.
+rewrite evaluate_Sr.
+simpl.
+simpl in A. rewrite A.
+assert (i1 <> Done).
+destruct i1; simpl in A; congruence.
+destruct i1; eauto.
+congruence.
+
+
+case_eq (ostep_fun (Some (i1, s, m))).
+intros.
+destruct p as [[a b] c].
+exists a, b, c. auto.
+intros.
+
+rewrite H0 in H.
+rewrite evaluate_None in H. inversion H.
 Qed.
 
 Lemma evaluates_seq i1 i2 i3 s m s1 s2 m1 m2:
-  evaluates (Some(i1,s,m)) (Some(Nop,s1,m1)) ->
+  evaluates (Some(i1,s,m)) (Some(Done,s1,m1)) ->
   evaluates (Some(i2,s1,m1)) (Some(i3,s2,m2)) ->
   evaluates (Some(i1;;i2,s,m)) (Some(i3,s2,m2)).
 Proof.
@@ -876,7 +954,7 @@ Qed.
 
 Lemma evaluates_loop body s m st x :
   has_data_type x t_bool ->
-  evaluates (Some(Nop,s,m)) st ->
+  evaluates (Some(Done(*Nop*),s,m)) st ->
   evaluates (Some(body ;; (Loop body),s,m)) st ->
   evaluates (Some(Loop body,x::s,m)) st.
 Proof.
@@ -905,7 +983,7 @@ inversion Htype.
   by exists f2.+1; move: Hev2; rewrite /evaluate iterSr /=.
 Qed.
 
-Lemma factorial_correct_eval m1 (n : nat) : evaluates (Some(factorial_program, [::Int64 (n%:Z)],m1)) (Some(Nop,[::Int64 ((factorial n)%:Z)],m1)).
+Lemma factorial_correct_eval m1 (n : nat) : evaluates (Some(factorial_program, [::Int64 (n%:Z)],m1)) (Some(Done,[::Int64 ((factorial n)%:Z)],m1)).
 Proof.
 do 4 apply: evaluates_onestep => /= .
 apply: evaluates_if; case Hn : n => [|n1] // .
@@ -937,7 +1015,7 @@ apply: evaluates_if; case Hn : n => [|n1] // .
   (* Generalize the goal a little bit. *)
   suff {Hn n1} H  : (forall N acc, acc * (Posz (factorial n)) = factorial N ->
     evaluates (Some (LOOP {{body}}, [:: get_neq (Int64 n); Int64 n; Int64 acc], m1))
-      (Some (NOP, [:: Int64 0; Int64 N`!], m1))).
+      (Some (Done(*Nop*), [:: Int64 0; Int64 N`!], m1))).
     specialize (H n 1).
     replace Dtrue with (get_neq (Int64 n)) by by subst.
     rewrite -Hn; apply: H; apply: mul1r.
