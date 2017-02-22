@@ -259,9 +259,9 @@ intros.
 simpl in H.
 unfold evaluates.
 exists O.
-simpl. congruence. 
+simpl. congruence.
 
-intros. 
+intros.
 rewrite evaluate_Sr in H.
 assert (A: exists i3 s3 m3, ostep_fun (Some (i1, s, m)) = (Some(i3,s3,m3))).
 
@@ -332,11 +332,11 @@ Lemma evaluates_if bt bf x s m st :
   evaluates (Some(If bt bf,x::s,m)) st.
 Proof.
 move => Htype.
-inversion Htype; case: b H => H.
-- case: x H Htype => // b H _ _ Htrue.
-  case: Htrue => // f1 Hev1 _.
+inversion Htype as [b H|]; case: b H => H H1 H2.
+- case: H1 => // => f1 Hev1.
   by exists f1.+1; move: Hev1; rewrite /evaluate iterSr /=.
-- case: x H Htype => // _ _ _ Hfalse.
-  case: Hfalse => // f2 Hev2.
+- case: H2 => // => f2 Hev2.
   by exists f2.+1; move: Hev2; rewrite /evaluate iterSr /=.
 Qed.
+
+End Path.

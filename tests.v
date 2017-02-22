@@ -10,7 +10,7 @@ Import GRing.Theory Num.Theory.
 Local Open Scope ring_scope.
 
 From Tezos
-  Require Import language.
+  Require Import language semantics.
 
 (* tests for notation precedence levels and associativity *)
 Section NotationTests.
@@ -65,3 +65,14 @@ Proof. by typecheck_program. Qed.
 *)
 
 End Typechecking_Tests.
+
+Section EvaluationTests.
+
+Variable m : memory.
+
+Eval vm_compute in step_fun (DROP ;; DROP) [::Int 1;Int 1] m.
+Eval vm_compute in step_fun (NOP ;; DROP) [::Int 1] m.
+Eval vm_compute in evaluate 1 (Some(DROP,[::Int 1; Int 1],m)).
+Eval vm_compute in evaluate 100 (Some((DROP ;; DROP),[::Int 1;Int 1],m)).
+
+End EvaluationTests.
