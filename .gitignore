@@ -3,3 +3,8 @@
 ~*
 *~
 *.swp
+*.aux
+*.v.d
+*.bak
+lia.cache
+*.bkp
