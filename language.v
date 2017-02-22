@@ -11,9 +11,6 @@ Local Open Scope ring_scope.
 
 Section Types.
 
-(** The type of an instruction consists of 2 components:
-    a list of types it consumes (from the stack) and
-    a list of types it produces (pushes on the stack). *)
 Inductive instr_type :=
 | Arrow : list type -> list type -> instr_type
 
@@ -21,17 +18,18 @@ with type :=
 | t_int
 | t_bool : type
 | t_pair : type -> type -> type
-(*| t_void : type*)
-(* to avoid recursion, might be a good idea to
-   separate primitive types from non-primitive ones *)
-(*| t_string : type*)
-(*| t_tez : tez -> type*)
-(*| t_contract : type -> type -> type*)
-(*| t_quotation : instr_type -> type*)
-.
+| t_option : type -> type
+| t_list : type -> type
+| t_string : type
+| t_map : type -> type -> type
+| t_signature : type
+| t_key : type
+| t_tez : type
+| t_contract : type -> type -> type
+| t_void : type
+| t_quotation : instr_type -> type.
 
 Definition stack_type := list type.
-
 End Types.
 
 Infix "-->" := Arrow (at level 75).
@@ -190,8 +188,6 @@ Notation "'DUPn' n" := (Dup_rec n) (at level 80).
 (* TODO: have a general notation for 'some code between accolades' *)
 (* Notation "'IF_SOME' '{{' '}}' '{{' bf '}}'" := (If_some NOP bf) (at level 80, right associativity). *)
 
-
-
 (* Section TypingJudgements. *)   (* TODO: Notations won't survive the end of the section. Can we do anything about this? *)
 
 (** Composition relation between instruction types.
@@ -261,6 +257,44 @@ Inductive has_instr_type : instr -> instr_type -> Prop :=
     MUL :i: ([ t_int ; t_int ] --> [ t_int ])
 | IT_Sub :
     SUB :i: ([ t_int ; t_int ] --> [ t_int ])
+| IT_Lt :
+    Lt :i: ([ t_int ] --> [ t_bool ])
+| IT_Ge :
+    Ge :i: ([ t_int ] --> [ t_bool ])
+| IT_Not :
+    Not :i: ([ t_bool ] --> [ t_bool ])
+| IT_And :
+    And :i: ([ t_bool ; t_bool ] --> [ t_bool ])
+| IT_Or :
+    Or :i: ([ t_bool ; t_bool ] --> [ t_bool ])
+| IT_Add :
+    Add :i: ([ t_int ; t_int ] --> [ t_int ])
+| IT_Lambda : forall b Sb,
+    b :i: Sb ->
+    Lambda b :i: Sb
+| IT_If_Some : forall t Sa Sb bt bf,
+    bt :i: (t :: Sa --> Sb) ->
+    bf :i: (Sa --> Sb) ->
+    If_some bt bf :i: (t_option t :: Sa --> Sb)
+| IT_Compare : forall t,
+    Compare :i: ([ t ; t ] --> [ t_int ])
+| IT_Car : forall t1 t2,
+    Car :i: ([ t_pair t1 t2 ] --> [ t1 ])
+| IT_Cdr : forall t1 t2,
+    Cdr :i: ([ t_pair t1 t2 ] --> [ t2 ])
+| IT_Hash : forall t,
+    Hash :i: ([ t ] --> [ t_string ])
+| IT_Get : forall tk tv,
+    Get :i: ([ tk ; t_map tk tv ] --> [ t_option tv ])
+| IT_Fail : forall Sa Sb,
+    Fail :i: (Sa --> Sb)
+| IT_Check_signature :
+    Check_signature :i: ([ t_key; t_pair t_signature t_string ] --> [ t_bool ])
+| IT_Map_reduce : forall tk tv t,
+    Map_reduce :i: ([ t_quotation ([t_pair (t_pair tk tv) t ] --> [ t ]) ; t_map tk tv ; t ] --> [ t ])
+(* TODO: is that correct? Anything to ensure on g? *)
+| IT_Transfer_funds : forall p r g,
+    Transfer_funds :i: ([ p ; t_tez ; t_contract p r ; g ] --> [ r ; g ] )
 where "i ':i:' IT" := (has_instr_type i IT)
 
 with has_data_type : tagged_data -> type -> Type :=
