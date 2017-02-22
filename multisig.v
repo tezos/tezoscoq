@@ -85,8 +85,21 @@ Variable m : memory.
 (* and to return a stack with a single element (pair return storage) *)
 
 (* (pair (pair (contract void void) tez) (map string signature) ) *)
-Definition argument := DPair (DPair (Int 6) (DTez (Tez 1))) (DMap empty_map).
-Definition storage := DPair (DMap empty_map) (Int 0).
+Definition void_contract_argument := Int 6. (* placeholder *)
+Definition multisig_transfer_amount := DTez (Tez 1).
+Definition keys := DMap empty_map.
+
+Definition argument :=
+  DPair
+    (DPair
+       void_contract_argument
+       multisig_transfer_amount)
+    keys.
+
+Definition storage_map := DMap empty_map.
+Definition needed_votes := Int 2.
+
+Definition storage := DPair storage_map (Int 2).
 Definition amount := DTez (Tez 42).
 
 Eval native_compute in evaluate 55 (Some(multisig_prog,[::DPair (DPair amount argument) storage],m)).
