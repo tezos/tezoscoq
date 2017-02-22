@@ -3,3 +3,4 @@ language.v
 semantics.v
 tests.v
 factorial.v
+multisig.v

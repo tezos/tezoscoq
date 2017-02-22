@@ -86,11 +86,25 @@ Inductive instr : Type :=
 | Eq : instr
 | Neq : instr
 | Lt : instr
+| Ge : instr
 | Not : instr
 | And : instr
 | Or : instr
 | Mul : instr
+| Add : instr
 | Sub : instr
+| Lambda : instr -> instr
+| If_some : instr -> instr -> instr
+| Compare : instr
+| Car : instr
+| Cdr : instr
+| H : instr
+| Get : instr
+| Fail : instr
+| Check_signature : instr
+| Checked_add : instr
+| Map_reduce : instr
+| Transfer_funds : instr
 .
 
 End Instructions.
@@ -100,6 +114,7 @@ End Instructions.
 Notation "c1 ';;' c2" := (Seq c1 c2) (at level 80, right associativity).
 Notation "'DONE'" := (Done).
 Notation "'NOP'" := (Nop).
+(* TODO: check if IF or IFB *)
 Notation "'IFB' '{{' bt '}}' '{{' bf '}}'" := (If bt bf) (at level 80, right associativity).
 Notation "'LOOP' '{{' body '}}'" := (Loop body) (at level 80, right associativity).
 Notation "'DIP' '{{' code '}}'" := (Dip code) (at level 80, right associativity).
@@ -115,7 +130,36 @@ Notation "'NOT'" := (Not).
 Notation "'AND'" := (And).
 Notation "'OR'" := (Or).
 Notation "'MUL'" := (Mul).
+Notation "'ADD'" := (Add).
 Notation "'SUB'" := (Sub).
+Notation "'LAMBDA' '{{' body '}}'" := (Lambda body) (at level 80, right associativity).
+Notation "'DIIP' '{{' code '}}'" := (Dip (Dip code)) (at level 80, right associativity).
+Notation "'DIIIP' '{{' code '}}'" := (Dip (Dip (Dip code))) (at level 80, right associativity).
+Notation "'IF_SOME' '{{' bt '}}' '{{' bf '}}'" := (If_some bt bf) (at level 80, right associativity).
+Notation "'COMPARE'" := (Compare).
+Notation "'IFCMPGE' '{{' bt '}}' '{{' bf '}}'" := (Compare;; Ge;; If bt bf) (at level 80, right associativity).
+Notation "'CDR'" := (Cdr).
+Notation "'CAR'" := (Car).
+Notation "'CADR'" := (CAR;; CDR).
+Notation "'CDAR'" := (CDR;; CAR).
+Notation "'H'" := (H).
+Notation "'GET'" := (Get).
+Notation "'FAIL'" := (Fail).
+Notation "'CHECK_SIGNATURE'" := (Check_signature).
+Notation "'MAP_REDUCE'" := (Map_reduce).
+Notation "'TRANSFER_FUNDS'" := (Transfer_funds).
+
+Fixpoint Dup_rec (n : nat) :=
+  match n with
+    | O => Done
+    | 1 => DUP
+    | n.+1 => DIP {{ Dup_rec n }} ;; SWAP
+  end.
+
+Notation "'DUPn' n" := (Dup_rec n) (at level 80).
+
+(* TODO: have a general notation for 'some code between accolades' *)
+(* Notation "'IF_SOME' '{{' '}}' '{{' bf '}}'" := (If_some NOP bf) (at level 80, right associativity). *)
 
 
 Section Types.
