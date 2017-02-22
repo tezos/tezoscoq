@@ -9,11 +9,43 @@ Set Implicit Arguments.
 Import GRing.Theory Num.Theory.
 Local Open Scope ring_scope.
 
-Section Data.
+Section Types.
 
-(* Inductive tez := Tez : nat -> tez. *)
-Axiom tez : Type.
+(** The type of an instruction consists of 2 components:
+    a list of types it consumes (from the stack) and
+    a list of types it produces (pushes on the stack). *)
+Inductive instr_type :=
+| Arrow : list type -> list type -> instr_type
+
+with type :=
+| t_int
+| t_bool : type
+| t_pair : type -> type -> type
+(*| t_void : type*)
+(* to avoid recursion, might be a good idea to
+   separate primitive types from non-primitive ones *)
+(*| t_string : type*)
+(*| t_tez : tez -> type*)
+(*| t_contract : type -> type -> type*)
+(*| t_quotation : instr_type -> type*)
+.
+
+Definition stack_type := list type.
+
+End Types.
+
+Infix "-->" := Arrow (at level 75).
+
+Section DataAndInstr.
+
+Inductive tez := Tez : nat -> tez.
 Axiom timestamp : Type.
+
+(* please kill me now *)
+Axiom Map : Type.
+Axiom empty_map : Map.
+Axiom get : forall A (m : Map) (x : A), option A.
+Axiom put : forall A (m : Map) (x : A), Map.
 
 (* for now, many items are commented as we are trying to get the
 architecture right and don't want to get clogged with very similar
@@ -27,7 +59,44 @@ Inductive tagged_data:=
 | DString : string -> tagged_data
 | Timestamp : timestamp -> tagged_data
 | DTez : tez -> tagged_data
-| DPair : tagged_data -> tagged_data -> tagged_data.
+| DPair : tagged_data -> tagged_data -> tagged_data
+| DMap : Map -> tagged_data
+| DLambda : instr -> tagged_data
+with
+instr : Type :=
+| Seq : instr -> instr -> instr
+| Done : instr
+| Nop : instr
+| If : instr -> instr -> instr
+| Loop : instr -> instr
+| Dip : instr -> instr
+| Drop : instr
+| Dup : instr
+| Swap : instr
+| Push : tagged_data -> instr
+| Pair : instr
+| Eq : instr
+| Neq : instr
+| Lt : instr
+| Ge : instr
+| Not : instr
+| And : instr
+| Or : instr
+| Mul : instr
+| Add : instr
+| Sub : instr
+| Lambda : instr -> instr
+| If_some : instr -> instr -> instr
+| Compare : instr
+| Car : instr
+| Cdr : instr
+| Hash : instr
+| Get : instr
+| Fail : instr
+| Check_signature : instr
+| Map_reduce : instr
+| Transfer_funds : instr
+.
 
 (* | Signature <signature constant> *)
 (* | Key <key constant> *)
@@ -67,47 +136,7 @@ Definition is_int i :=
 
 Definition stack := list tagged_data.
 
-End Data.
-
-Section Instructions.
-
-Inductive instr : Type :=
-| Seq : instr -> instr -> instr
-| Done : instr
-| Nop : instr
-| If : instr -> instr -> instr
-| Loop : instr -> instr
-| Dip : instr -> instr
-| Drop : instr
-| Dup : instr
-| Swap : instr
-| Push : tagged_data -> instr
-| Pair : instr
-| Eq : instr
-| Neq : instr
-| Lt : instr
-| Ge : instr
-| Not : instr
-| And : instr
-| Or : instr
-| Mul : instr
-| Add : instr
-| Sub : instr
-| Lambda : instr -> instr
-| If_some : instr -> instr -> instr
-| Compare : instr
-| Car : instr
-| Cdr : instr
-| H : instr
-| Get : instr
-| Fail : instr
-| Check_signature : instr
-| Checked_add : instr
-| Map_reduce : instr
-| Transfer_funds : instr
-.
-
-End Instructions.
+End DataAndInstr.
 
 (* Notations don't survive the end of section:
    that's why they are here *)
@@ -142,7 +171,7 @@ Notation "'CDR'" := (Cdr).
 Notation "'CAR'" := (Car).
 Notation "'CADR'" := (CAR;; CDR).
 Notation "'CDAR'" := (CDR;; CAR).
-Notation "'H'" := (H).
+Notation "'HASH'" := (Hash).
 Notation "'GET'" := (Get).
 Notation "'FAIL'" := (Fail).
 Notation "'CHECK_SIGNATURE'" := (Check_signature).
@@ -162,32 +191,6 @@ Notation "'DUPn' n" := (Dup_rec n) (at level 80).
 (* Notation "'IF_SOME' '{{' '}}' '{{' bf '}}'" := (If_some NOP bf) (at level 80, right associativity). *)
 
 
-Section Types.
-
-(** The type of an instruction consists of 2 components:
-    a list of types it consumes (from the stack) and
-    a list of types it produces (pushes on the stack). *)
-Inductive instr_type :=
-| Arrow : list type -> list type -> instr_type
-
-with type :=
-| t_int
-| t_bool : type
-| t_pair : type -> type -> type
-(*| t_void : type*)
-(* to avoid recursion, might be a good idea to
-   separate primitive types from non-primitive ones *)
-(*| t_string : type*)
-(*| t_tez : tez -> type*)
-(*| t_contract : type -> type -> type*)
-(*| t_quotation : instr_type -> type*)
-.
-
-Definition stack_type := list type.
-
-End Types.
-
-Infix "-->" := Arrow (at level 75).
 
 (* Section TypingJudgements. *)   (* TODO: Notations won't survive the end of the section. Can we do anything about this? *)
 

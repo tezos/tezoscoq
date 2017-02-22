@@ -82,8 +82,8 @@ apply: evaluates_if; case Hn : n => [|n1] //= .
       apply/negP; rewrite eq_sym => Hz0.
       by move/eqP in Hz0; rewrite -Hz0 in H1.
     do 14 apply: evaluates_onestep => /= .
-    exists 0%N => /= .
-    congr (Some _);congr(_,_,_);congr([::_;_;_]).
+    exists 1%N => /= .
+    congr (Some _);congr(_,_,_). congr([::_;_;_]).
     by rewrite H3.
   apply: (@evaluates_seq _ _ _ _ _ ([::Int 0; Int ((n1.+1)`!)%:Z])); last first => // .
     by apply: evaluates_onestep => /= ; exists 0%N.

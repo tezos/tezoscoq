@@ -10,7 +10,7 @@ Import GRing.Theory Num.Theory.
 Local Open Scope ring_scope.
 
 From Tezos
-  Require Import language (* semantics *).
+  Require Import language semantics.
 
 Definition multisig_prog :=
 (* e storage (pair (map string key) uint8) *)
@@ -28,7 +28,7 @@ Definition multisig_prog :=
     DUP;; CDR;; SWAP;; CADR;; DIP {{ DUP }} ;;  (* $input : $storage : $storage *)
     DIP {{ CDR;; SWAP;; CAR }} ;;             (* $input : $keys : $N : $storage *)
     DUP;; CDR;; SWAP;; CAR ;;                (* $action : $signatures : $keys : $N: $storage *)
-    DUP;; H ;;                             (* $hash : $action : $signatures : $keys : $N: $storage *)
+    DUP;; HASH ;;                             (* $hash : $action : $signatures : $keys : $N: $storage *)
     (* DIP {{ DIP {{ DIP {{ DUP }} ;; SWAP }} ;; SWAP }} ;; SWAP *)
     DUPn 3;; PAIR ;;                         (* pair $keys $hash : $action : $signatures : $N: $storage *)
     PUSH (Int 0);; SWAP;; PAIR ;;           (* pair (pair $keys $hash) 0 : $action : $signatures : $N : $storage *)
@@ -75,3 +75,18 @@ Definition multisig_prog :=
       FAIL
     }} (* not enough signatures, fail *)
 .
+
+Variable m : memory.
+
+
+
+(* dixit @klapklok *)
+(* So, the calling convention for contracts is to receive a stack with a single element (pair (pair amount arg) storage) *)
+(* and to return a stack with a single element (pair return storage) *)
+
+(* (pair (pair (contract void void) tez) (map string signature) ) *)
+Definition argument := DPair (DPair (Int 6) (DTez (Tez 1))) (DMap empty_map).
+Definition storage := DPair (DMap empty_map) (Int 0).
+Definition amount := DTez (Tez 42).
+
+Eval native_compute in evaluate 55 (Some(multisig_prog,[::DPair (DPair amount argument) storage],m)).

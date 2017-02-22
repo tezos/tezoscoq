@@ -26,6 +26,17 @@ Axiom get_return_value : tagged_data -> tagged_data.
 
 Axiom get_le : tagged_data -> int.
 Axiom get_lt : tagged_data -> int.
+Axiom get_ge : tagged_data -> int.
+
+Section Hash.
+(* Hash function (sha256, abstracted away here) *)
+Axiom hash : forall A :Type, A -> string.
+Axiom serialize : tagged_data -> string.
+
+Definition get_hash (x : tagged_data) : tagged_data :=
+  DString (hash (serialize x)).
+
+End Hash.
 
 Definition tbool_of_bool (b : bool) : tagged_data :=
   match b with
@@ -48,6 +59,12 @@ Definition get_neq x : tagged_data :=
 Definition get_mul (x : tagged_data) (y : tagged_data) : option tagged_data :=
   match x, y with
     | Int x, Int y => Some (Int (x * y))
+    | _, _ => None
+  end.
+
+Definition get_add (x : tagged_data) (y : tagged_data) : option tagged_data :=
+  match x, y with
+    | Int x, Int y => Some (Int (x + y))
     | _, _ => None
   end.
 
@@ -78,9 +95,10 @@ Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack *
                   | DBool false => Some(Done,s,m) (* doubtful *) (* is it less doubtful with Done *)
                   | _ => None
                   end else None
+  | Dip Done => Some(Done,s,m)
   | Dip i1 => if s is x::s then
                      match step_fun i1 s m with
-                       | Some (i2,s',m') => Some(i2,x::s',m')
+                       | Some (i2,s',m') => Some(Dip i2,x::s',m')
                        | None => None
                      end else None
   | Drop => if s is x::xs then Some(Done,xs,m) else None
@@ -91,6 +109,7 @@ Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack *
   | Eq => if s is x::s then if is_comparable x then Some(Done,((get_eq x))::s,m) else None else None
   | Neq => if s is x::s then if is_comparable x then Some(Done,((get_neq x))::s,m) else None else None
   | Lt => if s is x::s then if is_comparable x then Some(Done,(Int (get_lt x))::s,m) else None else None
+  | Ge => if s is x::s then if is_comparable x then Some(Done,(Int (get_ge x))::s,m) else None else None
   | Not => if s is x::s then match x with
                               | DBool true => Some(Done,DBool false::s,m)
                               | DBool false => Some(Done,DBool true::s,m)
@@ -121,7 +140,30 @@ Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack *
               | Some(x12) => Some(Done,x12::s,m)
               | None => None
           end else None
-
+  | Add => if s is x1::x2::s then
+            match (get_add x1 x2) with
+              | Some(x12) => Some(Done,x12::s,m)
+              | None => None
+          end else None
+  | Lambda code => Some(Done,DLambda code::s,m)
+  | If_some bt bf => None
+  | Compare => None
+  | Car => if s is x::s then
+             match x with
+               | DPair a _ => Some(Done,a::s,m)
+               | _ => None
+             end
+           else None
+  | Cdr => if s is x::s then
+             match x with
+               | DPair _ b => Some(Done,b::s,m)
+               | _ => None
+             end
+           else None
+  | Hash => if s is x::s then Some(Done,get_hash x::s,m) else None
+  | Get => None
+  | Fail => None
+  | Check_Signature => None
 end.
 
 
@@ -221,8 +263,8 @@ Lemma ostep_discr: forall i1 i2 s m s1 m1,
   ostep_fun (Some(i1,s,m)) = (Some(i2,s1,m1)) ->
   i1 <> Done.
 Proof.
-move => i1 i2 s m s1 m1 H.
-destruct i1; simpl ;simpl in H; congruence.
+move => i1 i2 s m s1 m1 H1.
+destruct i1; simpl ;simpl in H1; congruence.
 Qed.
 
 (* This lemma is true but not used currently *)
