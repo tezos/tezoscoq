@@ -147,6 +147,19 @@ Definition multisig_prog :=
       }} (*  not enough signatures, fail *)
 .
 
+(* Typing. *)
+
+Definition multisig_storage_type : type := t_pair (t_map t_string t_key) t_int.
+Definition multisig_param_type : type := t_pair (t_pair (t_contract t_unit t_unit)
+  t_tez) (t_map t_string t_signature).
+
+Definition multisig_type : instr_type := [
+  t_pair (t_pair t_tez multisig_param_type) multisig_storage_type
+  ] --> [ t_pair t_unit multisig_storage_type ].
+
+Theorem multisig_typed : multisig_prog :i: multisig_type.
+Proof. typecheck_program. Qed.
+
 Variable m : memory.
 
 
