@@ -102,4 +102,4 @@ Definition needed_votes := Int 2.
 Definition storage := DPair storage_map (Int 2).
 Definition amount := DTez (Tez 42).
 
-Eval native_compute in evaluate 55 (Some(multisig_prog,[::DPair (DPair amount argument) storage],m)).
+Eval native_compute in evaluate 56 (Some(multisig_prog,[::DPair (DPair amount argument) storage],m)).

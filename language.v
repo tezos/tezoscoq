@@ -39,17 +39,44 @@ Section DataAndInstr.
 Inductive tez := Tez : nat -> tez.
 Axiom timestamp : Type.
 
+(* Definition Map (A : Type) (B : Type) := list (prod A B). *)
+(* Definition empty_map A B : Map A B := @nil (prod A B). *)
+
+(* Definition get A B (m : Map A B) (x : A) := None. *)
+
 (* please kill me now *)
-Axiom Map : Type.
-Axiom empty_map : Map.
-Axiom get : forall A (m : Map) (x : A), option A.
-Axiom put : forall A (m : Map) (x : A), Map.
+(* Axiom Map : Type. *)
+(* Axiom empty_map : Map. *)
+(* Axiom get : forall A B (m : Map A B) (x : A), option A. *)
+(* Axiom put : forall A B (m : Map A B) (x : A), Map A B. *)
 
 (* for now, many items are commented as we are trying to get the
 architecture right and don't want to get clogged with very similar
 cases over and over. As we get more confident that we got things
 right, we will uncomment new elements *)
 
+Section Map.
+(* purely mathematical view of functional maps *)
+
+Definition myMap A B := list (prod A B).
+
+Definition empty_map {A} {B} := @nil (prod A B).
+
+Definition put {A B} (key : A) (value : B) (m : myMap A B) : myMap A B :=
+(key,value)::m.
+
+Definition contains {A} {B}
+(eq : A -> A -> bool) (k : A) (v : B) (m : myMap A B) :=
+  has (fun kv => eq kv.1 k) m.
+
+Definition remove {A} {B}
+  (eq : A -> A -> bool) (k : A) (v : B) (m : myMap A B) :=
+  (filter (fun kv => eq kv.1 k) m).
+
+Definition checked_put {A} {B} eq (k : A) (v : B) m :=
+  (k,v)::(remove eq k v m).
+
+End Map.
 Inductive tagged_data:=
 | Int : int -> tagged_data
 | Void
@@ -58,7 +85,7 @@ Inductive tagged_data:=
 | Timestamp : timestamp -> tagged_data
 | DTez : tez -> tagged_data
 | DPair : tagged_data -> tagged_data -> tagged_data
-| DMap : Map -> tagged_data
+| DMap : myMap tagged_data tagged_data -> tagged_data
 | DLambda : instr -> tagged_data
 with
 instr : Type :=
@@ -95,6 +122,7 @@ instr : Type :=
 | Map_reduce : instr
 | Transfer_funds : instr
 .
+
 
 (* | Signature <signature constant> *)
 (* | Key <key constant> *)
@@ -182,6 +210,12 @@ Fixpoint Dup_rec (n : nat) :=
     | 1 => DUP
     | n.+1 => DIP {{ Dup_rec n }} ;; SWAP
   end.
+
+Fixpoint Reduce_rec (lambda : instr) (m : myMap tagged_data tagged_data) :=
+match m with
+  | [] => Done
+  | kv::m => PUSH kv.2;; lambda;; (Reduce_rec lambda m) end
+.
 
 Notation "'DUPn' n" := (Dup_rec n) (at level 80).
 

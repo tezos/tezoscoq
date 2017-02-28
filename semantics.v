@@ -28,6 +28,10 @@ Axiom get_le : tagged_data -> int.
 Axiom get_lt : tagged_data -> int.
 Axiom get_ge : tagged_data -> int.
 
+Axiom get_le2 : tagged_data -> tagged_data -> int.
+Axiom get_lt2 : tagged_data -> tagged_data -> int.
+Axiom get_ge2 : tagged_data -> tagged_data -> int.
+
 Section Hash.
 (* Hash function (sha256, abstracted away here) *)
 Axiom hash : forall A :Type, A -> string.
@@ -76,6 +80,11 @@ Definition get_sub (x : tagged_data) (y : tagged_data) : option tagged_data :=
 
 Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack * memory) :=
   match i with
+  (* | Ge => if s is x::s then if is_comparable x then Some(Done,(Int (get_ge x))::s,m) else None else None *)
+  | Compare;;(GE;;i') => if s is x1::x2::s then
+                           (Some(i',(Int (get_ge2 x1 x2))::s,m))
+                         else
+                           None
   | Done ;; i2 => Some (i2, s, m)
   | i1 ;; i2 => if step_fun i1 s m is Some(i,s',m') then
                    Some(i;;i2,s',m')
@@ -147,7 +156,6 @@ Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack *
           end else None
   | Lambda code => Some(Done,DLambda code::s,m)
   | If_some bt bf => None
-  | Compare => None
   | Car => if s is x::s then
              match x with
                | DPair a _ => Some(Done,a::s,m)
@@ -163,18 +171,27 @@ Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack *
   | Hash => if s is x::s then Some(Done,get_hash x::s,m) else None
   | Get => None
   | Fail => None
-  | Check_Signature => None
+  | Check_signature => None
+  | Map_reduce => if s is (DLambda lam)::(DMap Map)::s then
+                    Some(Reduce_rec lam Map,s,m)
+                  else
+                    None
+  | Transfer_funds => None
+  | Compare => None
 end.
 
 
 
-Lemma step_fun_seq : forall i1 i2 s m,
-  step_fun (i1 ;; i2) s m =
+Lemma step_fun_seq :
+  forall i1 i2 s m,
+    i1 <> Compare ->
+    step_fun (i1 ;; i2) s m =
     if i1 is Done then Some (i2, s, m)
     else if step_fun i1 s m is Some(i,s',m') then Some(i;;i2,s',m')
-    else None.
+         else None.
 Proof.
-by [].
+move => i1.
+by case: i1.
 Qed.
 
 
@@ -226,6 +243,7 @@ by rewrite addnC iter_add Hev1.
 Qed.
 
 Lemma ostep_fun_seq i1 i2 s m :
+  i1 <> Compare ->
   ostep_fun (Some(i1;;i2,s,m)) =
   if i1 is Done then Some(i2,s,m) else
   if ostep_fun (Some(i1,s,m)) is
@@ -269,10 +287,11 @@ Qed.
 
 (* This lemma is true but not used currently *)
 Lemma ostep_fun_weaken i1 i1' i2 s s1 m m1 :
+  i1 <> Compare ->
   ostep_fun (Some(i1,s,m)) = (Some(i1',s1,m1)) ->
   (ostep_fun (Some(i1;;i2,s,m))) = (Some(i1';;i2,s1,m1)).
 Proof.
-intro H.
+intros Hi1Comp H.
 generalize (ostep_discr) ; intro Discr.
 generalize (Discr _ _ _ _ _ _ H); clear Discr.
 move => Hi1 /=.
@@ -289,49 +308,74 @@ Proof.
 by move => [f Hf]; exists f.+1 ;rewrite evaluate_Sr.
 Qed.
 
-Lemma evaluates_weaken: forall i1 i1' i2 s s1 m m1,
+Lemma evaluates_weaken:
+  forall i1 i1' i2 s s1 m m1,
+    i1 <> Compare ->
   evaluates (Some(i1,s,m)) (Some(i1',s1,m1)) ->
   evaluates (Some(i1;;i2,s,m)) (Some(i1';;i2,s1,m1)).
 Proof.
-intros.
-destruct H as [f].
-generalize i1 i1' i2 s s1 m m1 H; clear i1 i1' i2 s s1 m m1 H.
-induction f.
-intros.
-simpl in H.
-unfold evaluates.
-exists O.
-simpl. congruence.
+move => i1 i1' i2 s s1 m m1 Hi1nComp H.
+elim: H => f.
+elim: f i1 i1' i2 s s1 m m1 Hi1nComp => [|f HIf] i1 i1' i2 s s1 m m1 Hi1nComp.
+  move => /= [] ->* .
+  by exists 0%N => /=; congruence.
 
-intros.
-rewrite evaluate_Sr in H.
-assert (A: exists i3 s3 m3, ostep_fun (Some (i1, s, m)) = (Some(i3,s3,m3))).
-
-Focus 2.
-destruct A as [i3 [s3 [m3 A]]].
-rewrite A in H.
-generalize (IHf _ _ i2 _ _ _ _ H).
-intro B.
-destruct B as [g B].
-exists g.+1.
 rewrite evaluate_Sr.
-simpl.
-simpl in A. rewrite A.
-assert (i1 <> Done).
-destruct i1; simpl in A; congruence.
-destruct i1; eauto.
-congruence.
+suff A : exists i3 s3 m3, ostep_fun (Some (i1, s, m)) = (Some(i3,s3,m3)).
+elim: A => [i3 [s3 [m3]]] A.
+rewrite A => H.
+apply: evaluates_trans.
+apply: evaluates_step_fun => /=.
+rewrite (@ostep_fun_weaken i1 i3 i2 s s1 m m1) => // .
+apply: HIf => // .
+Admitted.
 
 
-case_eq (ostep_fun (Some (i1, s, m))).
-intros.
-destruct p as [[a b] c].
-exists a, b, c. auto.
-intros.
+(* Lemma evaluates_weaken:  *)
+(*   forall i1 i1' i2 s s1 m m1, *)
+(*     i1 <> Compare -> *)
+(*   evaluates (Some(i1,s,m)) (Some(i1',s1,m1)) -> *)
+(*   evaluates (Some(i1;;i2,s,m)) (Some(i1';;i2,s1,m1)). *)
+(* Proof. *)
+(* move => i1 i1' i2 s s1 m m1 Hi1nComp H. *)
+(* destruct H as [f]. *)
+(* generalize i1 i1' i2 s s1 m m1 H; clear i1 i1' i2 s s1 m m1 H. *)
+(* induction f. *)
+(* intros. *)
+(* simpl in H. *)
+(* unfold evaluates. *)
+(* exists O. *)
+(* simpl. congruence. *)
 
-rewrite H0 in H.
-rewrite evaluate_None in H. inversion H.
-Qed.
+(* intros. *)
+(* rewrite evaluate_Sr in H. *)
+(* assert (A: exists i3 s3 m3, ostep_fun (Some (i1, s, m)) = (Some(i3,s3,m3))). *)
+
+(* Focus 2. *)
+(* destruct A as [i3 [s3 [m3 A]]]. *)
+(* rewrite A in H. *)
+(* generalize (IHf _ _ i2 _ _ _ _ H). *)
+(* intro B. *)
+(* destruct B as [g B]. *)
+(* exists g.+1. *)
+(* rewrite evaluate_Sr. *)
+(* simpl. *)
+(* simpl in A. rewrite A. *)
+(* assert (i1 <> Done). *)
+(* destruct i1; simpl in A; congruence. *)
+(* destruct i1; eauto. *)
+(* congruence. *)
+
+
+(* case_eq (ostep_fun (Some (i1, s, m))). *)
+(* intros. *)
+(* destruct p as [[a b] c]. *)
+(* exists a, b, c. auto. *)
+(* intros. *)
+
+(* rewrite H0 in H. *)
+(* rewrite evaluate_None in H. inversion H. *)
+(* Qed. *)
 
 Lemma evaluates_seq i1 i2 i3 s m s1 s2 m1 m2:
   evaluates (Some(i1,s,m)) (Some(Done,s1,m1)) ->
@@ -341,9 +385,10 @@ Proof.
 move => Hev1 Hev2.
 apply: evaluates_trans; last exact: Hev2.
 apply: evaluates_trans.
-  by apply: evaluates_weaken => //; exact: Hev1.
-exact: evaluates_step_fun.
-Qed.
+  apply: evaluates_weaken => //; try exact: Hev1.
+Admitted.
+(* exact: evaluates_step_fun. *)
+(* Qed. *)
 
 Lemma evaluatesEq st1 st2 : evaluates st1 st2 <-> exists f, evaluate f st1 = st2.
 Proof.
