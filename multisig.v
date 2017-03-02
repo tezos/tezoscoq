@@ -78,16 +78,14 @@ Definition multisig_prog :=
 
 Variable m : memory.
 
-
-
 (* dixit @klapklok *)
 (* So, the calling convention for contracts is to receive a stack with a single element (pair (pair amount arg) storage) *)
 (* and to return a stack with a single element (pair return storage) *)
 
 (* (pair (pair (contract void void) tez) (map string signature) ) *)
-Definition void_contract_argument := Int 6. (* placeholder *)
+Definition void_contract_argument := DString "beneficiary address". (* placeholder *)
 Definition multisig_transfer_amount := DTez (Tez 1).
-Definition keys := DMap empty_map.
+Definition keys := DMap [(DString "Satoshi",DString "malicious_signature_1");(DString "Wikileaks",DString "malicious_signature_2")].
 
 Definition argument :=
   DPair
@@ -96,10 +94,11 @@ Definition argument :=
        multisig_transfer_amount)
     keys.
 
-Definition storage_map := DMap empty_map.
+Definition raw_storage_map : myMap tagged_data tagged_data := [(DString "Satoshi",DString "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa");(DString "Laszlo",DString "1XPTgDRhN8RFnzniWCddobD9iKZatrvH4");(DString "Wikileaks",DString "1HB5XMLmzFVj8ALj6mfBsbifRoD4miY36v")].
+Definition storage_map := DMap raw_storage_map.
 Definition needed_votes := Int 2.
 
 Definition storage := DPair storage_map (Int 2).
 Definition amount := DTez (Tez 42).
 
-Eval native_compute in evaluate 55 (Some(multisig_prog,[::DPair (DPair amount argument) storage],m)).
+Eval native_compute in evaluate 20 (Some(multisig_prog,[::DPair (DPair amount argument) storage],m)).

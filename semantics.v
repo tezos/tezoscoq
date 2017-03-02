@@ -74,6 +74,18 @@ Definition get_sub (x : tagged_data) (y : tagged_data) : option tagged_data :=
     | _, _ => None
   end.
 
+Definition get_compare x y : option tagged_data :=
+  match x,y with
+    | Int x, Int y => Some (Int (if x==y then 0 else if (x < y) then -1 else 1))
+    | _, _ => None
+  end.
+
+(* of course we want something more subtle. We will want an inductive
+type for signatures so that checking a signature is boolean equality
+to a primitive *)
+Definition check_signature (key sig str_to_check :
+string) := true.
+
 Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack * memory) :=
   match i with
   | Done ;; i2 => Some (i2, s, m)
@@ -146,8 +158,17 @@ Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack *
               | None => None
           end else None
   | Lambda code => Some(Done,DLambda code::s,m)
-  | If_some bt bf => None
-  | Compare => None
+  | If_some bt bf => match s with
+                       | DOption (Some v)::s => Some(bt,v::s,m)
+                       | DOption (None)::s => Some(bf,s,m)
+                       | _ => None
+                     end
+  | Compare => if s is x1::x2::s then
+                 match get_compare x1 x2 with
+                   | Some res => Some(Done,res::s,m)
+                   | _ => None end
+               else
+                 None
   | Car => if s is x::s then
              match x with
                | DPair a _ => Some(Done,a::s,m)
@@ -161,9 +182,24 @@ Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack *
              end
            else None
   | Hash => if s is x::s then Some(Done,get_hash x::s,m) else None
-  | Get => None
+  | Get => if s is key::DMap Map::s then
+             match get (fun x y => eq_td x y) key Void Void Map with
+                 | Some res => Some (Done,DOption (Some res)::s,m)
+                 | None => Some (Done,(DOption None)::s,m)
+             end
+           else None
   | Fail => None
-  | Check_Signature => None
+  (* :: key : pair signature string : 'S   ->   bool : 'S *)
+  | Check_signature => if s is DString key:: DPair (DString sig) (DString str_to_check)::s then Some (Done,DBool (check_signature key sig str_to_check) ::s,m) else None
+  | Map_reduce => if s is (DLambda lam)::(DMap Map)::x::s then
+                    match Reduce_rec lam Map x with
+                      | Some(instr,newst) => Some(instr,newst++s,m)
+                      | None => None
+                    end
+                  else
+                    None
+  | Transfer_funds => None
+  | Exec => if s is x::DLambda f::s then Some(f,x::s,m) else None
 end.
 
 
