@@ -26,7 +26,7 @@ with type :=
 | t_key : type
 | t_tez : type
 | t_contract : type -> type -> type
-| t_void : type
+| t_unit : type
 | t_quotation : instr_type -> type.
 
 Definition stack_type := list type.
@@ -85,7 +85,7 @@ Definition get {A} {B}
 End Map.
 Inductive tagged_data:=
 | Int : int -> tagged_data
-| Void
+| Unit
 | DBool : bool -> tagged_data
 | DString : string -> tagged_data
 | Timestamp : timestamp -> tagged_data
@@ -127,7 +127,7 @@ instr : Type :=
 | Fail : instr
 | Check_signature : instr
 | Map_reduce : instr
-| Transfer_funds : instr
+| Transfer_tokens : instr
 | Exec : instr
 .
 
@@ -192,6 +192,7 @@ Notation "'DROP'" := (Drop).
 Notation "'DUP'" := (Dup).
 Notation "'SWAP'" := (Swap).
 Notation "'PUSH' x" := (Push x) (at level 35).
+Notation "'UNIT'" := (Push Unit).
 Notation "'PAIR'" := (Pair).
 Notation "'EQ'" := (Eq).
 Notation "'NEQ'" := (Neq).
@@ -203,9 +204,8 @@ Notation "'MUL'" := (Mul).
 Notation "'ADD'" := (Add).
 Notation "'SUB'" := (Sub).
 Notation "'LAMBDA' '{{' body '}}'" := (Lambda body) (at level 80, right associativity).
-Notation "'DIIP' '{{' code '}}'" := (Dip (Dip code)) (at level 80, right associativity).
-Notation "'DIIIP' '{{' code '}}'" := (Dip (Dip (Dip code))) (at level 80, right associativity).
 Notation "'IF_SOME' '{{' bt '}}' '{{' bf '}}'" := (If_some bt bf) (at level 80, right associativity).
+Notation "'IF_NONE' '{{' bt '}}' '{{' bf '}}'" := (If_some bf bt) (at level 80, right associativity).
 Notation "'COMPARE'" := (Compare).
 Notation "'IFCMPGE' '{{' bt '}}' '{{' bf '}}'" := (Compare;; Ge;; If bt bf) (at level 80, right associativity).
 Notation "'CDR'" := (Cdr).
@@ -217,9 +217,15 @@ Notation "'GET'" := (Get).
 Notation "'FAIL'" := (Fail).
 Notation "'CHECK_SIGNATURE'" := (Check_signature).
 Notation "'MAP_REDUCE'" := (Map_reduce).
-Notation "'TRANSFER_FUNDS'" := (Transfer_funds).
+Notation "'TRANSFER_TOKENS'" := (Transfer_tokens).
 Notation "'EXEC'" := (Exec).
 Notation "'GET'" := (Get).
+
+(* More DI...IPs. *)
+Notation "'DIIP' '{{' code '}}'" := (Dip (Dip code)) (at level 80, right associativity).
+Notation "'DIIIP' '{{' code '}}'" := (Dip (Dip (Dip code))) (at level 80, right associativity).
+
+(* More DU...UPs. *)
 
 Fixpoint Dup_rec (n : nat) :=
   match n with
@@ -241,6 +247,7 @@ Fixpoint Reduce_rec (lambda : instr) (m : myMap tagged_data tagged_data) (x : ta
 (* . *)
 
 Notation "'DUPn' n" := (Dup_rec n) (at level 80).
+Notation "'DUUUUUUP'" := (Dup_rec 6) (at level 80).
 
 (* TODO: have a general notation for 'some code between accolades' *)
 (* Notation "'IF_SOME' '{{' '}}' '{{' bf '}}'" := (If_some NOP bf) (at level 80, right associativity). *)
@@ -283,8 +290,9 @@ Inductive has_instr_type : instr -> instr_type -> Prop :=
     (i1 ;; i2) :i: (Sx --> Sy)
 | IT_Done :
     DONE :i: ([] --> [])
-| IT_Nop :
-    NOP :i: ([] --> [])
+| IT_Nop : forall S,
+(* Should we generalize this pattern? What about DONE? *)
+    NOP :i: (S --> S)
 | IT_Drop : forall t,
     DROP :i: ([ t ] --> [])
 | IT_Dup : forall t,
@@ -328,7 +336,7 @@ Inductive has_instr_type : instr -> instr_type -> Prop :=
     Add :i: ([ t_int ; t_int ] --> [ t_int ])
 | IT_Lambda : forall b Sb,
     b :i: Sb ->
-    Lambda b :i: Sb
+    Lambda b :i: ([] --> [ t_quotation Sb ])
 | IT_If_Some : forall t Sa Sb bt bf,
     bt :i: (t :: Sa --> Sb) ->
     bf :i: (Sa --> Sb) ->
@@ -350,13 +358,14 @@ Inductive has_instr_type : instr -> instr_type -> Prop :=
 | IT_Map_reduce : forall tk tv t,
     Map_reduce :i: ([ t_quotation ([t_pair (t_pair tk tv) t ] --> [ t ]) ; t_map tk tv ; t ] --> [ t ])
 (* TODO: is that correct? Anything to ensure on g? *)
-| IT_Transfer_funds : forall p r g,
-    Transfer_funds :i: ([ p ; t_tez ; t_contract p r ; g ] --> [ r ; g ] )
+| IT_Transfer_tokens : forall p r g,
+    Transfer_tokens :i: ([ p ; t_tez ; t_contract p r ; g ] --> [ r ; g ] )
 where "i ':i:' IT" := (has_instr_type i IT)
 
 with has_data_type : tagged_data -> type -> Type :=
 | T_bool : forall b, DBool b :d: t_bool
 | T_Int : forall z, Int z :d: t_int
+| T_Unit : Unit :d: t_unit
 where "d ':d:' DT" := (has_data_type d DT).
 
 Hint Constructors has_instr_type.

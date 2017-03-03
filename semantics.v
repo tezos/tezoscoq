@@ -183,7 +183,7 @@ Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack *
            else None
   | Hash => if s is x::s then Some(Done,get_hash x::s,m) else None
   | Get => if s is key::DMap Map::s then
-             match get (fun x y => eq_td x y) key Void Void Map with
+             match get (fun x y => eq_td x y) key Unit Unit Map with
                  | Some res => Some (Done,DOption (Some res)::s,m)
                  | None => Some (Done,(DOption None)::s,m)
              end
@@ -198,7 +198,7 @@ Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack *
                     end
                   else
                     None
-  | Transfer_funds => None
+  | Transfer_tokens => None
   | Exec => if s is x::DLambda f::s then Some(f,x::s,m) else None
 end.
 
@@ -410,7 +410,7 @@ Lemma evaluates_if bt bf x s m st :
   evaluates (Some(If bt bf,x::s,m)) st.
 Proof.
 move => Htype.
-inversion Htype as [b H|]; case: b H => H H1 H2.
+inversion Htype as [b H| |]; case: b H => H H1 H2.
 - case: H1 => // => f1 Hev1.
   by exists f1.+1; move: Hev1; rewrite /evaluate iterSr /=.
 - case: H2 => // => f2 Hev2.
