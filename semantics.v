@@ -24,9 +24,9 @@ not understand as of now *)
 Axiom get_new_global : tagged_data -> tagged_data.
 Axiom get_return_value : tagged_data -> tagged_data.
 
-Axiom get_le : tagged_data -> int.
-Axiom get_lt : tagged_data -> int.
-Axiom get_ge : tagged_data -> int.
+Axiom get_le : tagged_data -> bool.
+Axiom get_lt : tagged_data -> bool.
+Axiom get_ge : tagged_data -> bool.
 
 Section Hash.
 (* Hash function (sha256, abstracted away here) *)
@@ -121,7 +121,7 @@ Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack *
   | Eq => if s is x::s then if is_comparable x then Some(Done,((get_eq x))::s,m) else None else None
   | Neq => if s is x::s then if is_comparable x then Some(Done,((get_neq x))::s,m) else None else None
   | Lt => if s is x::s then if is_comparable x then Some(Done,(Int (get_lt x))::s,m) else None else None
-  | Ge => if s is x::s then if is_comparable x then Some(Done,(Int (get_ge x))::s,m) else None else None
+  | Ge => if s is x::s then if is_comparable x then Some(Done,(DBool (get_ge x))::s,m) else None else None
   | Not => if s is x::s then match x with
                               | DBool true => Some(Done,DBool false::s,m)
                               | DBool false => Some(Done,DBool true::s,m)
