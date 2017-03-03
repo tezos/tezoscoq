@@ -26,17 +26,11 @@ Axiom get_return_value : tagged_data -> tagged_data.
 
 Axiom get_le : tagged_data -> bool.
 Axiom get_lt : tagged_data -> bool.
-Axiom get_ge : tagged_data -> bool.
-
-Section Hash.
-(* Hash function (sha256, abstracted away here) *)
-Axiom hash : forall A :Type, A -> string.
-Axiom serialize : tagged_data -> string.
-
-Definition get_hash (x : tagged_data) : tagged_data :=
-  DString (hash (serialize x)).
-
-End Hash.
+Definition get_ge (x : tagged_data) : bool :=
+  match x with
+    | Int x => (x >= 0)
+    | _ => false
+  end.
 
 Definition tbool_of_bool (b : bool) : tagged_data :=
   match b with
@@ -80,12 +74,6 @@ Definition get_compare x y : option tagged_data :=
     | _, _ => None
   end.
 
-(* of course we want something more subtle. We will want an inductive
-type for signatures so that checking a signature is boolean equality
-to a primitive *)
-Definition check_signature (key sig str_to_check :
-string) := true.
-
 Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack * memory) :=
   match i with
   | Done ;; i2 => Some (i2, s, m)
@@ -120,7 +108,7 @@ Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack *
   | Pair => if s is a::b::s then Some(Done,(DPair a b)::s,m) else None
   | Eq => if s is x::s then if is_comparable x then Some(Done,((get_eq x))::s,m) else None else None
   | Neq => if s is x::s then if is_comparable x then Some(Done,((get_neq x))::s,m) else None else None
-  | Lt => if s is x::s then if is_comparable x then Some(Done,(Int (get_lt x))::s,m) else None else None
+  | Lt => if s is x::s then if is_comparable x then Some(Done,(DBool (get_lt x))::s,m) else None else None
   | Ge => if s is x::s then if is_comparable x then Some(Done,(DBool (get_ge x))::s,m) else None else None
   | Not => if s is x::s then match x with
                               | DBool true => Some(Done,DBool false::s,m)
@@ -190,7 +178,7 @@ Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack *
            else None
   | Fail => None
   (* :: key : pair signature string : 'S   ->   bool : 'S *)
-  | Check_signature => if s is DString key:: DPair (DString sig) (DString str_to_check)::s then Some (Done,DBool (check_signature key sig str_to_check) ::s,m) else None
+  | Check_signature => if s is DKey key:: DPair (DSignature sig) (DString text)::s then Some (Done,DBool (check_signature key sig text) ::s,m) else None
   | Map_reduce => if s is (DLambda lam)::(DMap Map)::x::s then
                     match Reduce_rec lam Map x with
                       | Some(instr,newst) => Some(instr,newst++s,m)
@@ -198,7 +186,9 @@ Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack *
                     end
                   else
                     None
-  | Transfer_tokens => None
+  | Transfer_tokens => if s is [input;DTez amount;contract;g] then
+                         let call_result (* placeholder *) := Unit in
+                         Some(Done,[call_result;g],m) else None
   | Exec => if s is x::DLambda f::s then Some(f,x::s,m) else None
 end.
 

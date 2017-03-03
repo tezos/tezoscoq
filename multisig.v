@@ -167,22 +167,44 @@ Variable m : memory.
 (* and to return a stack with a single element (pair return storage) *)
 
 (* (pair (pair (contract void void) tez) (map string signature) ) *)
-Definition void_contract_argument := DString "beneficiary address". (* placeholder *)
+Definition ben_addr := (Sstring "beneficiary address").
+Definition void_contract_argument := DString ben_addr. (* placeholder *)
 Definition multisig_transfer_amount := DTez (Tez 1).
-Definition keys := DMap [(DString "Satoshi",DString "malicious_signature_1");(DString "Wikileaks",DString "malicious_signature_2")].
+Definition text_to_sign := get_raw_hash (DPair (DString ben_addr) (multisig_transfer_amount)).
+Definition input_signatures :=
+  DMap
+    [(DString (Sstring "Satoshi"),
+      DSignature (Sign (K "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa") text_to_sign));
+
+      (DString (Sstring "Wikileaks"),
+       DSignature (Sign (K "1HB5XMLmzFVj8ALj6mfBsbifRoD4miY36v") text_to_sign))].
 
 Definition argument :=
   DPair
     (DPair
        void_contract_argument
        multisig_transfer_amount)
-    keys.
+    input_signatures.
 
-Definition raw_storage_map : myMap tagged_data tagged_data := [(DString "Satoshi",DString "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa");(DString "Laszlo",DString "1XPTgDRhN8RFnzniWCddobD9iKZatrvH4");(DString "Wikileaks",DString "1HB5XMLmzFVj8ALj6mfBsbifRoD4miY36v")].
+(* the list of public keys controlling the smart contract *)
+Definition raw_storage_map : myMap tagged_data tagged_data :=
+  [
+    (DString (Sstring "Satoshi"),DKey (K "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"));
+    (DString (Sstring "Laszlo"),DKey (K "1XPTgDRhN8RFnzniWCddobD9iKZatrvH4"));
+    (DString (Sstring "Wikileaks"),DKey (K "1HB5XMLmzFVj8ALj6mfBsbifRoD4miY36v"))].
 Definition storage_map := DMap raw_storage_map.
-Definition needed_votes := Int 2.
+Definition needed_votes := Int 1.
 
-Definition storage := DPair storage_map (Int 2).
+Definition storage := DPair storage_map needed_votes.
 Definition amount := DTez (Tez 42).
 
-Eval native_compute in evaluate 20 (Some(multisig_prog,[::DPair (DPair amount argument) storage],m)).
+Notation "x %tz " := (DTez (Tez x)) (at level 80, right associativity).
+Notation "s %s" := ((Sstring s)) (at level 80, right associativity).
+Notation "s %ds" := (DString (Sstring s)) (at level 80, right associativity).
+Notation "k %k" := ((K k)) (at level 80, right associativity).
+Notation "k %dk" := (DKey (K k)) (at level 80, right associativity).
+(* Notation "#signof< k , sig , text >" := (Sign k sig text) (at level 79, right associativity). *) (* does not work *)
+Notation "#hashof< h >" := ((Shash (hash h))) (at level 80, right associativity).
+Notation "'(' x ',' y )" := (DPair x y) (at level 80, right associativity).
+
+Eval vm_compute in evaluate 193 (Some(multisig_prog,[::DPair (DPair amount argument) storage],m)).

@@ -83,11 +83,70 @@ Definition get {A} {B}
     Some (nth defv (map snd m) index) else None.
 
 End Map.
+
+Section String_missing.
+
+Definition eq_string (s1 s2 : string) : bool.
+  case: (string_dec s1 s2) => H12; [exact: true|exact: false].
+Defined.
+
+End String_missing.
+
+Section Hash.
+(* Hash function (sha256, abstracted away here) *)
+
+Inductive hashT : Type :=
+| hash : string -> hashT.
+
+End Hash.
+
+
+Section String_or_hash.
+
+Inductive string_or_hash :=
+| Sstring : string -> string_or_hash
+| Shash : hashT -> string_or_hash.
+
+Definition eq_string_or_hash s1 s2 :=
+  match s1,s2 with
+    | Sstring s1, Sstring s2 => eq_string s1 s2
+    | Shash (hash s1),Shash (hash s2) => eq_string s1 s2
+    (* if we had a concrete hashing function we would not do this of course: *)
+    | _,_ => false
+  end.
+
+Definition to_string s1 : string :=
+  match s1 with
+    | Sstring s1 => s1
+    | Shash (hash s1) => "<hash of "++s1++">"
+  end.
+
+End String_or_hash.
+
+Local Coercion to_string : string_or_hash >-> string.
+
+Section Signature.
+
+Inductive key : Type :=
+  K : string -> key.
+
+Inductive sig : Type :=
+  Sign : key -> string_or_hash -> sig.
+
+Definition check_signature (k : key) (s : sig) (text : string_or_hash) :=
+  match k, s with
+    | K key, Sign (K key') raw => eq_string key key' && eq_string_or_hash raw text
+  end.
+
+End Signature.
+
 Inductive tagged_data:=
 | Int : int -> tagged_data
 | Unit
 | DBool : bool -> tagged_data
-| DString : string -> tagged_data
+| DString : string_or_hash -> tagged_data
+| DKey : key -> tagged_data
+| DSignature : sig -> tagged_data
 | Timestamp : timestamp -> tagged_data
 | DTez : tez -> tagged_data
 | DPair : tagged_data -> tagged_data -> tagged_data
@@ -131,13 +190,39 @@ instr : Type :=
 | Exec : instr
 .
 
+Fixpoint serialize (t : tagged_data) : string :=
+  match t with
+    | Int n => "placeholder for integers"
+    | DString s => s
+    | Unit => "()"
+    | DBool true => "true"
+    | DBool false => "false"
+    | DKey (K s) => "key: s"
+    | DSignature (Sign (K key) text) => "sign("++key++","++text++")"
+    | Timestamp t => "TODO: serialize timestamp"
+    | DTez t => "<some amount in tezos>"
+    | DPair a b => "("++(serialize a)++","++(serialize b)++")"
+    | DMap m => "<map>"
+    | DLambda l => "<lambda>"
+    | DOption o => match o with Some o => "Some "++(serialize o) | None => "None" end
+  end.
+
+Definition get_raw_hash (x : tagged_data) :=
+  (Shash (hash (serialize x))).
+
+Definition get_hash (x : tagged_data) : tagged_data :=
+  DString (get_raw_hash x).
+
 (* partial equality, TODO: finish *)
-Definition eq_td x y :=
+Fixpoint eq_td x y :=
   match x,y with
     | Int m, Int n => m == n
-    | DString s1, DString s2 => (* dirty *) prefix s1 s2 && prefix s2 s1
+    | DString (Sstring s1), DString (Sstring s2) => (* dirty *) eq_string s1 s2
+    | DString (Shash (hash x1)),DString (Shash (hash x2)) => eq_string x1 x2
     | _, _ => false
   end.
+
+
 
 (* | Signature <signature constant> *)
 (* | Key <key constant> *)
