@@ -1,5 +1,6 @@
 -R . Tezos
 language.v
+blockchain.v
 semantics.v
 tests.v
 factorial.v

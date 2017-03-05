@@ -66,12 +66,12 @@ Definition put {A B} (key : A) (value : B) (m : myMap A B) : myMap A B :=
 (key,value)::m.
 
 Definition contains {A} {B}
-(eq : A -> A -> bool) (k : A) (v : B) (m : myMap A B) :=
+(eq : A -> A -> bool) (k : A) (* (v : B) *) (m : myMap A B) :=
   has (fun kv => eq kv.1 k) m.
 
 Definition remove {A} {B}
   (eq : A -> A -> bool) (k : A) (v : B) (m : myMap A B) :=
-  (filter (fun kv => eq kv.1 k) m).
+  (filter (fun kv => negb (eq kv.1 k)) m).
 
 Definition checked_put {A} {B} eq (k : A) (v : B) m :=
   (k,v)::(remove eq k v m).
@@ -140,6 +140,15 @@ Definition check_signature (k : key) (s : sig) (text : string_or_hash) :=
 
 End Signature.
 
+(* for now we adopt a deliberately simple model where there are only
+explicit accounts and implicit ones and their handles are natural integers incremented by the blockchain (see blockchain.v) *)
+(* type for contract handles *)
+(* Inductive handle := *)
+(* | originated : hashT -> handle *)
+(* | implicit : hashT -> handle. *)
+
+Definition handle := nat.
+
 Inductive tagged_data:=
 | Int : int -> tagged_data
 | Unit
@@ -153,6 +162,7 @@ Inductive tagged_data:=
 | DMap : myMap tagged_data tagged_data -> tagged_data
 | DLambda : instr -> tagged_data
 | DOption : (option tagged_data) -> tagged_data
+| DContract : handle -> tagged_data
 with
 instr : Type :=
 | Seq : instr -> instr -> instr
@@ -188,6 +198,7 @@ instr : Type :=
 | Map_reduce : instr
 | Transfer_tokens : instr
 | Exec : instr
+| Create_contract : instr
 .
 
 Fixpoint serialize (t : tagged_data) : string :=
@@ -197,14 +208,15 @@ Fixpoint serialize (t : tagged_data) : string :=
     | Unit => "()"
     | DBool true => "true"
     | DBool false => "false"
-    | DKey (K s) => "key: s"
+    | DKey (K s) => "key: "++ s
     | DSignature (Sign (K key) text) => "sign("++key++","++text++")"
-    | Timestamp t => "TODO: serialize timestamp"
+    | Timestamp t => "<timestamp>"
     | DTez t => "<some amount in tezos>"
     | DPair a b => "("++(serialize a)++","++(serialize b)++")"
     | DMap m => "<map>"
     | DLambda l => "<lambda>"
     | DOption o => match o with Some o => "Some "++(serialize o) | None => "None" end
+    | DContract handle => "<Contract : <handle> >"
   end.
 
 Definition get_raw_hash (x : tagged_data) :=
@@ -266,6 +278,20 @@ End DataAndInstr.
 
 (* Notations don't survive the end of section:
    that's why they are here *)
+
+(* Notations for data *)
+Notation "x %tz " := (DTez (Tez x)) (at level 80, right associativity).
+Notation "s %s" := ((Sstring s)) (at level 80, right associativity).
+Notation "s %ds" := (DString (Sstring s)) (at level 80, right associativity).
+Notation "k %k" := ((K k)) (at level 80, right associativity).
+Notation "k %dk" := (DKey (K k)) (at level 80, right associativity).
+(* Notation "#signof< k , sig , text >" := (Sign k sig text) (at level 79, right associativity). *) (* does not work *)
+Notation "#hashof< h >" := ((Shash (hash h))) (at level 80, right associativity).
+(* TODO: find better notation, with smarter precedence for pairs *)
+Notation "'{' x ',' y }" := (DPair x y) (at level 80, right associativity).
+
+(* Notations for instructions *)
+
 Notation "c1 ';;' c2" := (Seq c1 c2) (at level 80, right associativity).
 Notation "'DONE'" := (Done).
 Notation "'NOP'" := (Nop).

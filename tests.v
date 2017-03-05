@@ -69,10 +69,11 @@ End Typechecking_Tests.
 Section EvaluationTests.
 
 Variable m : memory.
+Variable h : handle.
 
 Eval vm_compute in step_fun (DROP ;; DROP) [::Int 1;Int 1] m.
 Eval vm_compute in step_fun (NOP ;; DROP) [::Int 1] m.
-Eval vm_compute in evaluate 1 (Some(DROP,[::Int 1; Int 1],m)).
-Eval vm_compute in evaluate 100 (Some((DROP ;; DROP),[::Int 1;Int 1],m)).
+Eval vm_compute in evaluate h 1 (Some(DROP,[::Int 1; Int 1],m)).
+Eval vm_compute in evaluate h 100 (Some((DROP ;; DROP),[::Int 1;Int 1],m)).
 
 End EvaluationTests.

@@ -58,7 +58,7 @@ Example typing_factorial :
 Proof. by typecheck_program. Qed.
 
 
-Lemma factorial_correct_eval m1 (n : nat) : evaluates (Some(factorial_program, [::Int (n%:Z)],m1)) (Some(Done,[::Int ((factorial n)%:Z)],m1)).
+Lemma factorial_correct_eval h m1 (n : nat) : evaluates h (Some(factorial_program, [::Int (n%:Z)],m1)) (Some(Done,[::Int ((factorial n)%:Z)],m1)).
 Proof.
 do 4 apply: evaluates_onestep => /= .
 apply: evaluates_if; case Hn : n => [|n1] //= .
@@ -69,12 +69,12 @@ apply: evaluates_if; case Hn : n => [|n1] //= .
   exact: evaluates_self.
 - move => _.
   do 8 apply evaluates_onestep => /= .
-  set body := (X in evaluates (Some(LOOP {{ X }} ;; _,_,_)) _) .
+  set body := (X in evaluates h (Some(LOOP {{ X }} ;; _,_,_)) _) .
   have Hsuff b (z : int) zacc b1 :
       (z >= 1) ->
       b = get_neq (Int z) ->
       b1 = get_neq (Int (z-1)) ->
-      evaluates ((Some(LOOP {{ body }},[:: b; Int z; Int zacc],m1))) (Some(LOOP {{body}},[:: b1 ; Int (z-1)%Z; Int (z*zacc)],m1)).
+      evaluates h ((Some(LOOP {{ body }},[:: b; Int z; Int zacc],m1))) (Some(LOOP {{body}},[:: b1 ; Int (z-1)%Z; Int (z*zacc)],m1)).
     move =>  H1 H2 H3.
     apply: evaluates_onestep => /= .
     have -> : b = DBool true.
@@ -85,11 +85,11 @@ apply: evaluates_if; case Hn : n => [|n1] //= .
     exists 1%N => /= .
     congr (Some _);congr(_,_,_). congr([::_;_;_]).
     by rewrite H3.
-  apply: (@evaluates_seq _ _ _ _ _ ([::Int 0; Int ((n1.+1)`!)%:Z])); last first => // .
+  apply: (@evaluates_seq _ _ _ _ _ _ ([::Int 0; Int ((n1.+1)`!)%:Z])); last first => // .
     by apply: evaluates_onestep => /= ; exists 0%N.
   (* Generalize the goal a little bit. *)
   suff {Hn n1} H  : (forall N acc, acc * (Posz (factorial n)) = factorial N ->
-    evaluates (Some (LOOP {{body}}, [:: get_neq (Int n); Int n; Int acc], m1))
+    evaluates h (Some (LOOP {{body}}, [:: get_neq (Int n); Int n; Int acc], m1))
       (Some (Done(*Nop*), [:: Int 0; Int N`!], m1))).
     specialize (H n 1).
     replace (DBool true) with (get_neq (Int n)) by by subst.

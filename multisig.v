@@ -10,7 +10,7 @@ Import GRing.Theory Num.Theory.
 Local Open Scope ring_scope.
 
 From Tezos
-  Require Import language semantics.
+  Require Import language blockchain semantics.
 
 (* Original Michelson program:
 storage (pair (map string key) uint8) ;
@@ -160,17 +160,36 @@ Definition multisig_type : instr_type := [
 Theorem multisig_typed : multisig_prog :i: multisig_type.
 Proof. typecheck_program. Qed.
 
-Variable m : memory.
 
+Definition sender_handle := 0%nat.
+Definition receiver_handle := 1%nat.
+
+(* sender contract *)
+Definition sender_contract : contract := C (K "sender") None false false FAIL.
+Definition sender_balance : balance := Tez 10.
+Definition sender_storage : storage := Unit.
+Definition sender_contract_repr := (sender_contract,sender_balance,sender_storage).
+
+(* receiver contract *)
+Definition receiver_contract : contract := C (K "receiver") None false false FAIL.
+Definition receiver_balance : balance := Tez 0.
+Definition receiver_storage : storage := Unit.
+Definition receiver_contract_repr := (receiver_contract,receiver_balance,receiver_storage).
+
+
+Definition m :=
+  checked_put eqkey receiver_handle receiver_contract_repr
+  (checked_put eqkey sender_handle sender_contract_repr empty_blockchain).
+Eval vm_compute in m.
 (* dixit @klapklok *)
 (* So, the calling convention for contracts is to receive a stack with a single element (pair (pair amount arg) storage) *)
 (* and to return a stack with a single element (pair return storage) *)
 
 (* (pair (pair (contract void void) tez) (map string signature) ) *)
 Definition ben_addr := (Sstring "beneficiary address").
-Definition void_contract_argument := DString ben_addr. (* placeholder *)
+Definition void_contract_argument := DContract receiver_handle.
 Definition multisig_transfer_amount := DTez (Tez 1).
-Definition text_to_sign := get_raw_hash (DPair (DString ben_addr) (multisig_transfer_amount)).
+Definition text_to_sign := get_raw_hash (DPair (DContract receiver_handle) (multisig_transfer_amount)).
 Definition input_signatures :=
   DMap
     [(DString (Sstring "Satoshi"),
@@ -198,13 +217,4 @@ Definition needed_votes := Int 1.
 Definition storage := DPair storage_map needed_votes.
 Definition amount := DTez (Tez 42).
 
-Notation "x %tz " := (DTez (Tez x)) (at level 80, right associativity).
-Notation "s %s" := ((Sstring s)) (at level 80, right associativity).
-Notation "s %ds" := (DString (Sstring s)) (at level 80, right associativity).
-Notation "k %k" := ((K k)) (at level 80, right associativity).
-Notation "k %dk" := (DKey (K k)) (at level 80, right associativity).
-(* Notation "#signof< k , sig , text >" := (Sign k sig text) (at level 79, right associativity). *) (* does not work *)
-Notation "#hashof< h >" := ((Shash (hash h))) (at level 80, right associativity).
-Notation "'(' x ',' y )" := (DPair x y) (at level 80, right associativity).
-
-Eval vm_compute in evaluate 193 (Some(multisig_prog,[::DPair (DPair amount argument) storage],m)).
+Eval vm_compute in evaluate sender_handle 187 (Some(multisig_prog,[::DPair (DPair amount argument) storage],m)).

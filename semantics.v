@@ -10,9 +10,10 @@ Import GRing.Theory Num.Theory.
 Local Open Scope ring_scope.
 
 From Tezos
-  Require Import language.
+  Require Import language blockchain.
 
-Axiom memory : Type.
+(* TODO: rename all this *)
+Definition memory := blockchain.
 
 (* I'm guessing these will be replaced by accesses to memory, with a
 precise spec *)
@@ -74,10 +75,10 @@ Definition get_compare x y : option tagged_data :=
     | _, _ => None
   end.
 
-Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack * memory) :=
+Fixpoint step_fun (i : instr) (s : stack) (m : memory) (cur_handle : handle) : option (instr * stack * memory) :=
   match i with
   | Done ;; i2 => Some (i2, s, m)
-  | i1 ;; i2 => if step_fun i1 s m is Some(i,s',m') then
+  | i1 ;; i2 => if step_fun i1 s m cur_handle is Some(i,s',m') then
                    Some(i;;i2,s',m')
                  else
                    None
@@ -97,7 +98,7 @@ Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack *
                   end else None
   | Dip Done => Some(Done,s,m)
   | Dip i1 => if s is x::s then
-                     match step_fun i1 s m with
+                     match step_fun i1 s m cur_handle with
                        | Some (i2,s',m') => Some(Dip i2,x::s',m')
                        | None => None
                      end else None
@@ -186,18 +187,37 @@ Fixpoint step_fun (i : instr) (s : stack) (m : memory) : option (instr * stack *
                     end
                   else
                     None
-  | Transfer_tokens => if s is [input;DTez amount;contract;g] then
-                         let call_result (* placeholder *) := Unit in
-                         Some(Done,[call_result;g],m) else None
+  | Transfer_tokens => if s is [input;DTez amount;DContract hreceiver;new_storage] then
+                         match transfer_tokens input amount cur_handle hreceiver new_storage m with
+                           | None => None (* transaction failed) *)
+                           | Some (result,m') => Some(DONE,[result;new_storage],m')
+                         end
+                       else None
   | Exec => if s is x::DLambda f::s then Some(f,x::s,m) else None
+  | Create_contract => match s with
+                         (* first case: we have an optional delegate *)
+                         | kman%dk::(kdel%dk)::(DBool spendable)::(DBool delegatable)::(DTez init_amount)::DLambda code::storage::s =>
+                           (* the new pair: handle, new chain *)
+                           let hn := create_contract (kman%k) (Some (kdel%k)) spendable delegatable init_amount code storage m in
+                           let handle := hn.1 in
+                           let new_chain := hn.2 in
+                           Some(Done,DContract handle::s,new_chain)
+                         (* second case: no delegate *)                        
+                         | kman%dk::(DBool spendable)::(DBool delegatable)::(DTez init_amount)::DLambda code::storage::s =>
+                           let hn := create_contract (kman%k) None spendable delegatable init_amount code storage m in
+                           let handle := hn.1 in
+                           let new_chain := hn.2 in
+                           Some(Done,DContract handle::s,new_chain)
+                         | _ => None
+                       end
 end.
 
 
 
-Lemma step_fun_seq : forall i1 i2 s m,
-  step_fun (i1 ;; i2) s m =
+Lemma step_fun_seq : forall i1 i2 s m h,
+  step_fun (i1 ;; i2) s m h =
     if i1 is Done then Some (i2, s, m)
-    else if step_fun i1 s m is Some(i,s',m') then Some(i;;i2,s',m')
+    else if step_fun i1 s m h is Some(i,s',m') then Some(i;;i2,s',m')
     else None.
 Proof.
 by [].
@@ -208,41 +228,41 @@ Section Path.
 
 Import Option.
 
-Definition ostep_fun state :=
+Definition ostep_fun h state :=
   match state with
     | None => None
-    | Some(i,s,m) => step_fun i s m
+    | Some(i,s,m) => step_fun i s m h
   end.
 
-Lemma ostep_fun_Done i2 s m : ostep_fun (ostep_fun (Some(Done;;i2,s,m))) = ostep_fun (Some(i2,s,m)).
+Lemma ostep_fun_Done i2 s m h : ostep_fun (ostep_fun h (Some(Done;;i2,s,m))) = ostep_fun (Some(i2,s,m)).
 Proof.
 by [].
 Qed.
 
-Definition evaluate fuel state := iter fuel ostep_fun state.
+Definition evaluate h fuel state := iter fuel (ostep_fun h) state.
 
-Lemma evaluate_1 st : evaluate 1 st = ostep_fun st.
+Lemma evaluate_1 h st : evaluate h  1 st = ostep_fun h st.
 Proof.
 by [].
 Qed.
 
-Lemma evaluate_S f st : evaluate f.+1 st = ostep_fun (evaluate f st).
+Lemma evaluate_S h f st : evaluate h f.+1 st = ostep_fun h (evaluate h f st).
 Proof. by rewrite /evaluate; rewrite iterS. Qed.
 
-Lemma evaluate_Sr f st : evaluate f.+1 st = (evaluate f (ostep_fun st)).
+Lemma evaluate_Sr h f st : evaluate h f.+1 st = (evaluate h f (ostep_fun h st)).
 Proof. by rewrite /evaluate; rewrite iterSr. Qed.
 
-Lemma evaluate_None f : evaluate f None = None.
+Lemma evaluate_None h f : evaluate h f None = None.
 Proof. by elim: f => [|f'] => //= -> . Qed.
 
-Definition evaluate_trace state := traject ostep_fun state.
+Definition evaluate_trace h state := traject (ostep_fun h) state.
 
-Definition evaluates state1 state2 := exists f, evaluate f state1 = state2.
+Definition evaluates h state1 state2 := exists f, evaluate h f state1 = state2.
 
-Lemma eval_comp : forall f1 f2 st1 st2 st3,
-  evaluate f1 st1 = st2 ->
-  evaluate f2 st2 = st3 ->
-  evaluate (f1 + f2) st1 = st3.
+Lemma eval_comp h : forall f1 f2 st1 st2 st3,
+  evaluate h f1 st1 = st2 ->
+  evaluate h f2 st2 = st3 ->
+  evaluate h (f1 + f2) st1 = st3.
 Proof.
 elim => [|f1 Hind] f2 st1 st2 st3 .
   by rewrite /=; move ->; rewrite add0n.
@@ -251,31 +271,31 @@ move => Hev1 Hev2.
 by rewrite addnC iter_add Hev1.
 Qed.
 
-Lemma ostep_fun_seq i1 i2 s m :
-  ostep_fun (Some(i1;;i2,s,m)) =
+Lemma ostep_fun_seq h i1 i2 s m :
+  ostep_fun h (Some(i1;;i2,s,m)) =
   if i1 is Done then Some(i2,s,m) else
-  if ostep_fun (Some(i1,s,m)) is
+  if ostep_fun h (Some(i1,s,m)) is
   Some(i,s',m') then Some(i;;i2,s',m')
   else None.
 Proof.
 by case: i1.
 Qed.
 
-Lemma evaluates_step_fun i1 s m:
-evaluates (Some(i1,s,m)) (ostep_fun (Some(i1,s,m))).
+Lemma evaluates_step_fun h i1 s m:
+evaluates h (Some(i1,s,m)) (ostep_fun h (Some(i1,s,m))).
 Proof.
 by exists 1%N; rewrite evaluate_1.
 Qed.
 
-Lemma evaluates_self st : evaluates st st.
+Lemma evaluates_self h st : evaluates h st st.
 Proof.
  by exists 0%N.
 Qed.
 
-Lemma evaluates_trans st2 st1 st3 :
-  evaluates st1 st2 ->
-  evaluates st2 st3 ->
-  evaluates st1 st3.
+Lemma evaluates_trans h st2 st1 st3 :
+  evaluates h st1 st2 ->
+  evaluates h st2 st3 ->
+  evaluates h st1 st3.
 Proof.
 move => [f1 Hf1].
 move => [f2 Hf2].
@@ -285,8 +305,8 @@ rewrite /evaluate addnC iter_add.
 by move => -> ->.
 Qed.
 
-Lemma ostep_discr: forall i1 i2 s m s1 m1,
-  ostep_fun (Some(i1,s,m)) = (Some(i2,s1,m1)) ->
+Lemma ostep_discr h: forall i1 i2 s m s1 m1,
+  ostep_fun h (Some(i1,s,m)) = (Some(i2,s1,m1)) ->
   i1 <> Done.
 Proof.
 move => i1 i2 s m s1 m1 H1.
@@ -294,13 +314,13 @@ destruct i1; simpl ;simpl in H1; congruence.
 Qed.
 
 (* This lemma is true but not used currently *)
-Lemma ostep_fun_weaken i1 i1' i2 s s1 m m1 :
-  ostep_fun (Some(i1,s,m)) = (Some(i1',s1,m1)) ->
-  (ostep_fun (Some(i1;;i2,s,m))) = (Some(i1';;i2,s1,m1)).
+Lemma ostep_fun_weaken h i1 i1' i2 s s1 m m1 :
+  ostep_fun h (Some(i1,s,m)) = (Some(i1',s1,m1)) ->
+  (ostep_fun h (Some(i1;;i2,s,m))) = (Some(i1';;i2,s1,m1)).
 Proof.
 intro H.
 generalize (ostep_discr) ; intro Discr.
-generalize (Discr _ _ _ _ _ _ H); clear Discr.
+generalize (Discr _ _ _ _ _ _ _ H); clear Discr.
 move => Hi1 /=.
 generalize H; clear H.
 simpl.
@@ -308,16 +328,16 @@ case: (step_fun i1 s m) => [[[i' s' ] m'] |] // [] -> -> -> /=.
 by case Hi1 : i1 => // .
 Qed.
 
-Lemma evaluates_onestep st1 st2 :
-  evaluates (ostep_fun st1) st2 ->
-  evaluates st1 st2.
+Lemma evaluates_onestep h st1 st2 :
+  evaluates h (ostep_fun h st1) st2 ->
+  evaluates h st1 st2.
 Proof.
 by move => [f Hf]; exists f.+1 ;rewrite evaluate_Sr.
 Qed.
 
-Lemma evaluates_weaken: forall i1 i1' i2 s s1 m m1,
-  evaluates (Some(i1,s,m)) (Some(i1',s1,m1)) ->
-  evaluates (Some(i1;;i2,s,m)) (Some(i1';;i2,s1,m1)).
+Lemma evaluates_weaken h: forall i1 i1' i2 s s1 m m1,
+  evaluates h (Some(i1,s,m)) (Some(i1',s1,m1)) ->
+  evaluates h (Some(i1;;i2,s,m)) (Some(i1';;i2,s1,m1)).
 Proof.
 intros.
 destruct H as [f].
@@ -331,7 +351,7 @@ simpl. congruence.
 
 intros.
 rewrite evaluate_Sr in H.
-assert (A: exists i3 s3 m3, ostep_fun (Some (i1, s, m)) = (Some(i3,s3,m3))).
+assert (A: exists i3 s3 m3, ostep_fun h (Some (i1, s, m)) = (Some(i3,s3,m3))).
 
 Focus 2.
 destruct A as [i3 [s3 [m3 A]]].
@@ -349,7 +369,7 @@ destruct i1; eauto.
 congruence.
 
 
-case_eq (ostep_fun (Some (i1, s, m))).
+case_eq (ostep_fun h (Some (i1, s, m))).
 intros.
 destruct p as [[a b] c].
 exists a, b, c. auto.
@@ -359,10 +379,10 @@ rewrite H0 in H.
 rewrite evaluate_None in H. inversion H.
 Qed.
 
-Lemma evaluates_seq i1 i2 i3 s m s1 s2 m1 m2:
-  evaluates (Some(i1,s,m)) (Some(Done,s1,m1)) ->
-  evaluates (Some(i2,s1,m1)) (Some(i3,s2,m2)) ->
-  evaluates (Some(i1;;i2,s,m)) (Some(i3,s2,m2)).
+Lemma evaluates_seq h i1 i2 i3 s m s1 s2 m1 m2:
+  evaluates h (Some(i1,s,m)) (Some(Done,s1,m1)) ->
+  evaluates h (Some(i2,s1,m1)) (Some(i3,s2,m2)) ->
+  evaluates h (Some(i1;;i2,s,m)) (Some(i3,s2,m2)).
 Proof.
 move => Hev1 Hev2.
 apply: evaluates_trans; last exact: Hev2.
@@ -371,18 +391,18 @@ apply: evaluates_trans.
 exact: evaluates_step_fun.
 Qed.
 
-Lemma evaluatesEq st1 st2 : evaluates st1 st2 <-> exists f, evaluate f st1 = st2.
+Lemma evaluatesEq h st1 st2 : evaluates h st1 st2 <-> exists f, evaluate h f st1 = st2.
 Proof.
 split => Heval ; last exact: Heval.
   by case: Heval => n; exists n.
 Qed.
 
 
-Lemma evaluates_loop body s m st x :
+Lemma evaluates_loop h body s m st x :
   has_data_type x t_bool ->
-  evaluates (Some(Done,s,m)) st ->
-  evaluates (Some(body ;; (Loop body),s,m)) st ->
-  evaluates (Some(Loop body,x::s,m)) st.
+  evaluates h (Some(Done,s,m)) st ->
+  evaluates h (Some(body ;; (Loop body),s,m)) st ->
+  evaluates h (Some(Loop body,x::s,m)) st.
 Proof.
   move => Htype Hbase Hind.
   inversion Htype; case: b H => _; last first.
@@ -393,11 +413,11 @@ Proof.
 Qed.
 
 
-Lemma evaluates_if bt bf x s m st :
+Lemma evaluates_if h bt bf x s m st :
   has_data_type x t_bool ->
-  (x = DBool true -> evaluates (Some(bt,s,m)) st) ->
-  (x = DBool false -> evaluates (Some(bf,s,m)) st) ->
-  evaluates (Some(If bt bf,x::s,m)) st.
+  (x = DBool true -> evaluates h (Some(bt,s,m)) st) ->
+  (x = DBool false -> evaluates h (Some(bf,s,m)) st) ->
+  evaluates h (Some(If bt bf,x::s,m)) st.
 Proof.
 move => Htype.
 inversion Htype as [b H| |]; case: b H => H H1 H2.
