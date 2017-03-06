@@ -181,10 +181,7 @@ Fixpoint step_fun (i : instr) (s : stack) (m : memory) (cur_handle : handle) : o
   (* :: key : pair signature string : 'S   ->   bool : 'S *)
   | Check_signature => if s is DKey key:: DPair (DSignature sig) (DString text)::s then Some (Done,DBool (check_signature key sig text) ::s,m) else None
   | Map_reduce => if s is (DLambda lam)::(DMap Map)::x::s then
-                    match Reduce_rec lam Map x with
-                      | Some(instr,newst) => Some(instr,newst++s,m)
-                      | None => None
-                    end
+                    Some (Push x ;; Reduce_rec lam Map, s, m)
                   else
                     None
   | Transfer_tokens => if s is [input;DTez amount;DContract hreceiver;new_storage] then

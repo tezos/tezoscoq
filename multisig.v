@@ -210,13 +210,12 @@ Definition raw_storage_map : myMap tagged_data tagged_data :=
     (DString (Sstring "Laszlo"),DKey (K "1XPTgDRhN8RFnzniWCddobD9iKZatrvH4"));
     (DString (Sstring "Wikileaks"),DKey (K "1HB5XMLmzFVj8ALj6mfBsbifRoD4miY36v"))].
 Definition storage_map := DMap raw_storage_map.
-(* why does two break ? *)
-Definition needed_votes := Int 1.
+Definition needed_votes := Int 2.
 
 Definition storage := DPair storage_map needed_votes.
 Definition amount := DTez (Tez 42).
 
-Eval vm_compute in evaluate sender_handle 187 (Some(multisig_prog,[::DPair (DPair amount argument) storage],m)).
+Eval vm_compute in evaluate sender_handle 287 (Some(multisig_prog,[::DPair (DPair amount argument) storage],m)).
 
 
 

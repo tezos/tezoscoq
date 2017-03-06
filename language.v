@@ -345,12 +345,21 @@ Fixpoint Dup_rec (n : nat) :=
     | n.+1 => DIP {{ Dup_rec n }} ;; SWAP
   end.
 
+(* Expecting the initial argument already on the stack. *)
+Fixpoint Reduce_rec (lambda : instr) (m : myMap tagged_data tagged_data) : instr :=
+  match m with
+    | [] => Done
+    | kv :: m =>  PUSH (DPair kv.1 kv.2) ;; PAIR ;; PUSH (DLambda lambda) ;;
+        SWAP ;; EXEC ;; Reduce_rec lambda m
+  end.
+
+(*
 Fixpoint Reduce_rec (lambda : instr) (m : myMap tagged_data tagged_data) (x : tagged_data) : option (prod instr stack) :=
   match m with
     | [] => Some(Done,[x])
     | kv::m => Some(PUSH (DLambda lambda);; PUSH (DPair (DPair kv.1 kv.2) x);; EXEC,nil)
   end.
-
+*)
 (* Fixpoint Reduce_rec (lambda : instr) (m : myMap tagged_data tagged_data) := *)
 (* match m with *)
 (*   | [] => Done *)
