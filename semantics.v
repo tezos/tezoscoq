@@ -427,4 +427,9 @@ inversion Htype as [b H| |]; case: b H => H H1 H2.
   by exists f2.+1; move: Hev2; rewrite /evaluate iterSr /=.
 Qed.
 
+Lemma evaluates_map_reduce h lam x y s m Map :
+  evaluates h (Some(Map_reduce,(DLambda lam)::(DMap Map)::x::s,m)) (Some(Done,y::s,m)).
+Proof.
+Abort.
+
 End Path.
