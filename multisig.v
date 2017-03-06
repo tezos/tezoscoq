@@ -160,6 +160,7 @@ Definition multisig_type : instr_type := [
 Theorem multisig_typed : multisig_prog :i: multisig_type.
 Proof. typecheck_program. Qed.
 
+(* Parameters for interpreting the contract (some are arbitrary) *)
 
 Definition sender_handle := 0%nat.
 Definition receiver_handle := 1%nat.
@@ -180,13 +181,10 @@ Definition receiver_contract_repr := (receiver_contract,receiver_balance,receive
 Definition m :=
   checked_put eqkey receiver_handle receiver_contract_repr
   (checked_put eqkey sender_handle sender_contract_repr empty_blockchain).
-Eval vm_compute in m.
-(* dixit @klapklok *)
-(* So, the calling convention for contracts is to receive a stack with a single element (pair (pair amount arg) storage) *)
-(* and to return a stack with a single element (pair return storage) *)
 
-(* (pair (pair (contract void void) tez) (map string signature) ) *)
-Definition ben_addr := (Sstring "beneficiary address").
+(* state of the blockchain before executing multisig *)
+Eval vm_compute in m.
+
 Definition void_contract_argument := DContract receiver_handle.
 Definition multisig_transfer_amount := DTez (Tez 1).
 Definition text_to_sign := get_raw_hash (DPair (DContract receiver_handle) (multisig_transfer_amount)).
@@ -212,6 +210,7 @@ Definition raw_storage_map : myMap tagged_data tagged_data :=
     (DString (Sstring "Laszlo"),DKey (K "1XPTgDRhN8RFnzniWCddobD9iKZatrvH4"));
     (DString (Sstring "Wikileaks"),DKey (K "1HB5XMLmzFVj8ALj6mfBsbifRoD4miY36v"))].
 Definition storage_map := DMap raw_storage_map.
+(* why does two break ? *)
 Definition needed_votes := Int 1.
 
 Definition storage := DPair storage_map needed_votes.
