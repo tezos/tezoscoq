@@ -217,3 +217,20 @@ Definition storage := DPair storage_map needed_votes.
 Definition amount := DTez (Tez 42).
 
 Eval vm_compute in evaluate sender_handle 187 (Some(multisig_prog,[::DPair (DPair amount argument) storage],m)).
+
+
+
+Section Spec.
+
+(* stub of specification for multisig *)
+Lemma multisig_spec hsender hreceiver (b : blockchain) amount storage_map input_signatures_map multisig_transfer_amount needed_votes :
+  let void_contract_argument := DContract hreceiver in
+  let argument := DPair (DPair void_contract_argument multisig_transfer_amount) (DMap input_signatures_map) in
+  let storage :=  DPair storage_map needed_votes in
+  evaluates
+    hsender
+    (Some (multisig_prog,[::DPair (DPair amount argument) storage],b))
+    (Some(Done,nil,empty_blockchain)).
+Proof.
+do 70! (apply: evaluates_onestep) => /= .
+Abort.
