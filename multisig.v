@@ -216,7 +216,8 @@ Definition storage := DPair storage_map needed_votes.
 Definition amount := DTez (Tez 42).
 
 (* 287 *)
-Eval vm_compute in evaluate sender_handle 246 (Some(multisig_prog,[::DPair (DPair amount argument) storage],m)).
+Eval vm_compute in m.
+Eval vm_compute in evaluate sender_handle 287 (Some(multisig_prog,[::DPair (DPair amount argument) storage],m)).
 
 
 
@@ -236,8 +237,15 @@ Lemma multisig_correct hsender hreceiver (b b' : blockchain) amount storage_map 
   let void_contract_argument := DContract hreceiver in
   let action := (DPair void_contract_argument multisig_transfer_amount) in
   let argument := DPair action (DMap input_signatures_map) in
-  let storage :=  DPair storage_map needed_votes in
+  let storage :=  DPair storage_map (Int needed_votes) in
   (* begin preconditions *)
+  multisig_transfer_amount :d: t_tez ->
+  void_contract_argument :d: (t_contract t_unit t_unit) ->
+  needed_votes <= size input_signatures_map ->
+(* subgoal 2 (ID 43479) is: *)
+
+(* subgoal 3 (ID 43276) is: *)
+(*  needed_votes :d: t_int *)
   storage_map :d: t_map t_string t_key ->
   well_typed_map t_string t_signature input_signatures_map ->
   (* end preconditions *)
@@ -246,27 +254,33 @@ Lemma multisig_correct hsender hreceiver (b b' : blockchain) amount storage_map 
     (Some (multisig_prog,[::DPair (DPair amount argument) storage],b))
     (Some(Done,nil,b')).
 Proof.
-move => void_contract_argument action argument storage t_storage t_Map.
+move => void_contract_argument action argument storage typed_amount typed_contract Hineq t_storage t_Map.
 do 70! (apply: evaluates_onestep) => /= .
 apply: evaluates_trans.
 apply: evaluates_weaken.
 set lambda := (X in DLambda X).
+have Hlamtype : lambda :i: ([(t_pair (t_pair t_string t_signature) (t_pair (t_pair (t_map t_string t_key) t_string) t_int))] -->  [(t_pair (t_pair (t_map t_string t_key) t_string) t_int)])%type.
+by typecheck_program.
 
 (* x has type (pair (pair (map string key) string) uint8) *)
 
-apply: (evaluates_map_reduce_usable
+apply (@evaluates_map_reduce_usable
           (fun x kv =>
              let key := kv.1 in
              match x with
-               | DPair (DPair (DMap map1) (DSignature sig)) (Int counter) =>
+               | DPair (DPair (DMap map1) (DString s)) (Int counter) =>
                  match get (fun x y => eq_td x y) key Unit Unit map1 with
                    | Some (DKey key0) =>
-                     if check_signature key0 sig (get_raw_hash action) then
-                       Some (DPair (DPair (DMap map1) (DString (get_raw_hash action))) (Int (counter+1)))
-                     else
-                       None
+                     match kv.2 with
+                       | DSignature sig =>
+                         if check_signature key0 sig s then
+                           Some (DPair (DPair (DMap map1) (DString s)) (Int (1 + counter)))
+                         else
+                           None
+                       | _ => None
+                     end
                    | _ => None end
-                     | _ => None end)).
+               | _ => None end) _ _ _ (t_pair (t_pair (t_map t_string t_key) t_string) t_int) t_string t_signature).
   - by typecheck_program.
   - constructor; constructor.
       exact: t_storage.
@@ -283,7 +297,8 @@ apply: (evaluates_map_reduce_usable
     case counter => //; intros.
     case get => // ; intros.
     case t => //; intros.
-    case check_signature => // .
+    inversion Hval.
+    case Hcheck: check_signature => // .
     constructor; constructor => // .
     by inversion Htypex; inversion X.
   - intros.
@@ -294,26 +309,40 @@ apply: (evaluates_map_reduce_usable
     case t0 => //; intros.
     rewrite /=.
     case Hget: (get (fun x0 : tagged_data => [eta eq_td x0]) key Unit Unit m0) => // [a].
-    case a => // ; intros.
-    case checksig : (check_signature k s (get_raw_hash action)) => // .
-
-    do 41 apply: evaluates_onestep => /= .
+    case Ha : a => // [k]  ; intros.
+    case val => // ; intros.
+    case checksig : (check_signature k s0 s) => // .
+    do 41 (apply: evaluates_onestep => /= ).
     apply: evaluates_onestep => /= .
     rewrite Hget.
     do 25 apply: evaluates_onestep => /= .
-    inversion X1.
+    (* have Hakey : a :d: t_key by rewrite Ha; case k; constructor. *)
+    rewrite Ha.
+    apply: evaluates_onestep => /= .
+    rewrite checksig.
+    do 9 apply: evaluates_onestep => /= .
+    exact: evaluates_self.
     (* have Ha : a :d: t_key by admit. *) (* we can't possibly know that yet because it depends on the map m0 being well typed and on a lemma on get's output type.. *)
 
+instantiate (1 := DPair (DPair storage_map (get_hash action)) (Int (size input_signatures_map)%:Z)).
+admit.
 
+(* suff Hineq : (needed_votes <= size input_signatures_map). *)
+do 10 apply: evaluates_onestep => /= .
+apply: evaluates_onestep => /= .
+set i := (X in Int X).
+have Hi : 0 <= i.
+  rewrite ler_eqVlt in Hineq.
+  case/orP: Hineq.
+    by move/eqP; rewrite /i => ->; rewrite eq_refl // .
+  admit.
+apply: evaluates_onestep => /= .
+apply: evaluates_onestep => /= ; rewrite Hi.
+do 20 apply: evaluates_onestep => /= .
 
-(* inversion Hx; inversion X. *)
-(*   do 22! (apply: evaluates_onestep) => /= . *)
-(*   apply: evaluates_onestep => /= . *)
-(*   inversion X1. *)
-(*   apply: evaluates_onestep => /= . *)
-(*   case Hget : get => [a1|]. *)
-(*   admit. *)
-(* apply: evaluates_onestep => /= . *)
-Abort.
+inversion typed_amount.
+apply: evaluates_onestep => /= .
+admit.
+Admitted.
 
 End Spec.

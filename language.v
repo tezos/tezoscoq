@@ -27,7 +27,8 @@ with type :=
 | t_tez : type
 | t_contract : type -> type -> type
 | t_unit : type
-| t_quotation : instr_type -> type.
+| t_quotation : instr_type -> type
+| t_timestamp.
 
 Definition stack_type := list type.
 End Types.
@@ -37,7 +38,8 @@ Infix "-->" := Arrow (at level 75).
 Section DataAndInstr.
 
 Inductive tez := Tez : nat -> tez.
-Axiom timestamp : Type.
+(* TODO: change *)
+Definition timestamp := nat.
 
 (* Definition Map (A : Type) (B : Type) := list (prod A B). *)
 (* Definition empty_map A B : Map A B := @nil (prod A B). *)
@@ -496,11 +498,12 @@ with has_data_type : tagged_data -> type -> Type :=
 | T_Unit : Unit :d: t_unit
 | T_Pair : forall a b ta tb, a :d: ta -> b :d: tb -> DPair a b :d: t_pair ta tb
 | T_Tez : forall t, DTez t :d: t_tez
+| T_Key : forall k, DKey (K k) :d: t_key
 | T_option : forall o t, o :d: t -> DOption (Some o) :d: t_option t
 | T_map : forall m dfk dfv ta tb, dfk :d: ta -> dfv :d: tb -> (forall i, let kv := nth (dfk,dfv) m i in DPair kv.1 kv.2 :d: t_pair ta tb) -> DMap m :d: t_map ta tb
 | T_string : forall s, DString s :d: t_string
 | T_list : forall l A, DList l :d: t_list A
-| T_signature : forall s, DSignature s :d: t_signature
+| T_signature : forall k s, DSignature (Sign k s) :d: t_signature
 where "d ':d:' DT" := (has_data_type d DT).
 
 Hint Constructors has_instr_type.
@@ -579,7 +582,9 @@ Fixpoint default (t : type) : tagged_data :=
     | t_tez => DTez (Tez 0)
     | t_contract a b => DContract 0%nat(* (DROP;;PUSH (default b)) *)
     | t_quotation a => Unit (* missing datatype *)
+    | t_timestamp => Timestamp 0%nat
   end.
+
 
 Definition well_typed_map ta tb m := (forall i, let kv := nth (default ta,default tb) m i in DPair kv.1 kv.2 :d: t_pair ta tb).
 

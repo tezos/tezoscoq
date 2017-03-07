@@ -417,7 +417,7 @@ Lemma evaluates_if h bt bf x s m st :
   evaluates h (Some(If bt bf,x::s,m)) st.
 Proof.
 move => Htype.
-inversion Htype as [b H| | | | | | | | | ]; case: b H => H H1 H2.
+inversion Htype as [b H| | | | | | | | | | ]; case: b H => H H1 H2.
 - case: H1 => // => f1 Hev1.
   by exists f1.+1; move: Hev1; rewrite /evaluate iterSr /=.
 - case: H2 => // => f2 Hev2.
@@ -492,7 +492,9 @@ by rewrite foldl_None in Hfold.
 Qed.
 
 
-Lemma evaluates_map_reduce_usable (f : tagged_data -> tagged_data * tagged_data -> option tagged_data) h lam x (type_x t_key t_val : type) s m Map fxMap :
+Lemma evaluates_map_reduce_usable
+      (f : tagged_data -> tagged_data * tagged_data -> option tagged_data)
+      h lam x (type_x t_key t_val : type) s m Map fxMap :
   (lam :i: ([ t_pair (t_pair t_key t_val) type_x ] --> [ type_x ] : instr_type)) ->
   (x :d: type_x) ->
   well_typed_map t_key t_val Map ->

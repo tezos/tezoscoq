@@ -71,5 +71,59 @@ Definition transfer_tokens
           end
       end
   end.
-          (* Definition checked_put {A} {B} eq (k : A) (v : B) m := *)
-  (* (k,v)::(remove eq k v m). *)
+
+Section BooleanTyping.
+
+Definition o_t_pair (ta tb : option type) :=
+  match ta,tb with
+    | Some ta, Some tb => Some (t_pair ta tb)
+    | _, _ => None
+  end.
+
+(* Inductive contract := C : key -> option key -> *)
+(*               (* spendable *) bool -> (* delegatable *) bool -> *)
+(*               instr -> contract. *)
+(* (* saved for serializing later *) *)
+(* (* | DContract (K k) ok sp dl am instr => "<Contract : key = " ++ k ++ "; code = " ++ "<code>" ++ ">" *) *)
+(* Definition balance := tez. *)
+(* Definition storage := tagged_data. *)
+
+(* Definition contract_repr := (contract * balance * storage)%type. *)
+
+
+(* Fixpoint get_type (b : blockchain) (td : tagged_data) : option type := *)
+(*   match td with *)
+(*     | DBool _ => Some t_bool *)
+(*     | DString _ => Some t_string *)
+(*     | DMap _ => None *)
+(*     | DOption (Some x) =>  *)
+(*       match get_type b x with *)
+(*         | Some t => Some (t_option t) *)
+(*         | None => None (* unsatisfactory *) *)
+(*       end *)
+(*     | DOption None => None *)
+(*     | Int _ => Some t_int *)
+(*     | DContract h =>  *)
+(*       match get_contract h b with *)
+(*         | None => None *)
+(*         | Some (C _ _ _ _ code,_,_) =>  *)
+(*           match get_instr_type code with *)
+(*             | Some (Arrow ta tb) => Some (t_contract ta tb) *)
+(*             | None => None *)
+(*           end *)
+(*       end *)
+(*     | Unit => Some t_unit *)
+(*     | DKey _ => Some t_key *)
+(*     | DSignature _ => Some t_signature *)
+(*     | Timestamp _ => Some t_timestamp *)
+(*     | DTez _ => Some t_tez *)
+(*     | {x, y} => (o_t_pair (get_type b x) (get_type b y)) *)
+(*     | DLambda lam =>  *)
+(*       match get_instr_type lam with *)
+(*         | Some tlam => Some (t_quotation tlam) *)
+(*         | None => None *)
+(*       end *)
+(*   end with  *)
+(* get_instr_type i : option instr_type := [] --> []. *)
+
+End BooleanTyping.
