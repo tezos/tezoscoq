@@ -199,7 +199,7 @@ Fixpoint step_fun (i : instr) (s : stack) (m : memory) (cur_handle : handle) : o
                            let handle := hn.1 in
                            let new_chain := hn.2 in
                            Some(Done,DContract handle::s,new_chain)
-                         (* second case: no delegate *)                        
+                         (* second case: no delegate *)
                          | kman%dk::(DBool spendable)::(DBool delegatable)::(DTez init_amount)::DLambda code::storage::s =>
                            let hn := create_contract (kman%k) None spendable delegatable init_amount code storage m in
                            let handle := hn.1 in
@@ -417,16 +417,141 @@ Lemma evaluates_if h bt bf x s m st :
   evaluates h (Some(If bt bf,x::s,m)) st.
 Proof.
 move => Htype.
-inversion Htype as [b H| |]; case: b H => H H1 H2.
+inversion Htype as [b H| | | | | | | | | ]; case: b H => H H1 H2.
 - case: H1 => // => f1 Hev1.
   by exists f1.+1; move: Hev1; rewrite /evaluate iterSr /=.
 - case: H2 => // => f2 Hev2.
   by exists f2.+1; move: Hev2; rewrite /evaluate iterSr /=.
 Qed.
 
-Lemma evaluates_map_reduce h lam x y s m Map :
-  evaluates h (Some(Map_reduce,(DLambda lam)::(DMap Map)::x::s,m)) (Some(Done,y::s,m)).
+
+Lemma foldl_None A B (f : A -> B -> option A) l : foldl
+            (fun x kv =>
+             match x with
+             | Some x0 => f x0 kv
+             | None => None
+             end) None l = None.
 Proof.
-Abort.
+by elim: l => // .
+Qed.
+
+Lemma evaluates_map_reduce (f : tagged_data -> tagged_data * tagged_data -> option tagged_data) h lam x (type_x t_key t_val : type) s m Map :
+  (lam :i: ([ t_pair (t_pair t_key t_val) type_x ] --> [ type_x ] : instr_type)) ->
+  (x :d: type_x) ->
+  well_typed_map t_key t_val Map ->
+  (forall x key val, x :d: type_x -> key :d: t_key -> val :d: t_val -> match f x (key,val) with | Some fxkv => fxkv :d: type_x | None => True end) ->
+  (forall h1 s1 m1 i key val x,
+     x :d: type_x ->
+     key :d: t_key ->
+     val :d: t_val ->
+     match f x (key,val) with
+       | Some fxkv =>
+     evaluates h1 (Some(lam;;i,(DPair (DPair key val) x)::s1,m1)) (Some(Done;;i,(fxkv)::s1,m1))
+       | None => True
+     end
+  ) ->
+  match foldl (fun x kv => match x with | Some x => f x kv | None => None end ) (Some x) Map with
+    | Some fxMap =>
+  evaluates h (Some(Map_reduce,(DLambda lam)::(DMap Map)::x::s,m)) (Some(Done,(fxMap)::s,m))
+            | None => True end.
+Proof.
+move => Htypelam Htypex HtypeMap Htypef Hlam.
+case Hfold : foldl => [a|] // .
+do 3 apply: evaluates_onestep => /=.
+elim : Map x type_x Htypelam Htypex Htypef Hlam HtypeMap Hfold => [|kv Map HMap] x type_x Htypelam Htypex Htypef Hlam HtypeMap //= .
+  case => ->; exact: evaluates_self.
+move => Hfold.
+have Hkv := (HtypeMap 0%nat); simpl in Hkv.
+inversion Hkv.
+
+do 9 apply: evaluates_onestep => /= .
+  case Hfxkv : (f x (kv.1,kv.2)) => [fxkv|].
+  have HlamSome := (Hlam h s m (Reduce_rec lam Map) kv.1 kv.2 x Htypex X X0).
+  rewrite Hfxkv in HlamSome.
+  apply: evaluates_trans.
+  exact: HlamSome.
+apply: evaluates_onestep => /= .
+apply: evaluates_trans.
+  apply: HMap => // .
+  exact: Htypelam.
+have HtypefSome := Htypef x kv.1 kv.2 Htypex X X0.
+rewrite Hfxkv in HtypefSome.
+by apply: HtypefSome.
+exact: Htypef.
+exact: Hlam.
+move => i kv0.
+by move: (HtypeMap (i.+1)) => /=; rewrite /kv0.
+rewrite -surjective_pairing in Hfxkv.
+rewrite Hfxkv in Hfold.
+rewrite -Hfold.
+by congr (foldl _).
+exact: evaluates_self.
+rewrite -surjective_pairing in Hfxkv.
+rewrite Hfxkv /= in Hfold.
+by rewrite foldl_None in Hfold.
+Qed.
+
+
+Lemma evaluates_map_reduce_usable (f : tagged_data -> tagged_data * tagged_data -> option tagged_data) h lam x (type_x t_key t_val : type) s m Map fxMap :
+  (lam :i: ([ t_pair (t_pair t_key t_val) type_x ] --> [ type_x ] : instr_type)) ->
+  (x :d: type_x) ->
+  well_typed_map t_key t_val Map ->
+  (forall x key val, x :d: type_x -> key :d: t_key -> val :d: t_val -> match f x (key,val) with | Some fxkv => fxkv :d: type_x | None => True end) ->
+  (forall h1 s1 m1 i key val x,
+     x :d: type_x ->
+     key :d: t_key ->
+     val :d: t_val ->
+     match f x (key,val) with
+       | Some fxkv =>
+     evaluates h1 (Some(lam;;i,(DPair (DPair key val) x)::s1,m1)) (Some(Done;;i,(fxkv)::s1,m1))
+       | None => True
+     end
+  ) ->
+  foldl (fun x kv => match x with | Some x => f x kv | None => None end ) (Some x) Map = Some fxMap ->
+  evaluates h (Some(Map_reduce,(DLambda lam)::(DMap Map)::x::s,m)) (Some(Done,(fxMap)::s,m)).
+Proof.
+move => Htypelam Htypex HtypeMap Htypef Hlam Heq.
+move: (@evaluates_map_reduce f h lam x type_x t_key t_val s m Map).
+rewrite Heq.
+by apply.
+Qed.
+
+(* Many design changes can hopefully make this more palatable *)
+Lemma evaluates_map_reduce_weak (f : tagged_data -> tagged_data * tagged_data ->  tagged_data) h lam x (type_x t_key t_val : type) s m Map :
+  (lam :i: ([ t_pair (t_pair t_key t_val) type_x ] --> [ type_x ] : instr_type)) ->
+  (x :d: type_x) ->
+  well_typed_map t_key t_val Map ->
+  (forall x key val, x :d: type_x -> key :d: t_key -> val :d: t_val -> f x (key,val) :d: type_x) ->
+  (forall h1 s1 m1 i key val x,
+     x :d: type_x ->
+     key :d: t_key ->
+     val :d: t_val ->
+
+     evaluates h1 (Some(lam;;i,(DPair (DPair key val) x)::s1,m1)) (Some(Done;;i,(f x (key,val))::s1,m1))
+
+  ) ->
+  evaluates h (Some(Map_reduce,(DLambda lam)::(DMap Map)::x::s,m)) (Some(Done,(foldl f x Map)::s,m)).
+Proof.
+move => Htypelam Htypex HtypeMap Htypef Hlam.
+do 3 apply: evaluates_onestep => /=.
+elim : Map x type_x Htypelam Htypex Htypef Hlam HtypeMap => [|kv Map HMap] x type_x Htypelam Htypex Htypef Hlam HtypeMap //= .
+  exact: evaluates_self.
+have Hkv := (HtypeMap 0%nat); simpl in Hkv.
+inversion Hkv.
+do 9 apply: evaluates_onestep => /=.
+  apply: evaluates_trans.
+  apply: Hlam => //= .
+apply: evaluates_onestep => /= .
+apply: evaluates_trans.
+  apply: HMap => // .
+  exact: Htypelam.
+apply: Htypef => // .
+exact: Htypef.
+exact: Hlam.
+move => i kv0.
+by move: (HtypeMap (i.+1)) => /=; rewrite /kv0.
+by rewrite -surjective_pairing; apply: evaluates_self.
+Qed.
+
 
 End Path.

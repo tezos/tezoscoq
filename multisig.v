@@ -215,23 +215,105 @@ Definition needed_votes := Int 2.
 Definition storage := DPair storage_map needed_votes.
 Definition amount := DTez (Tez 42).
 
-Eval vm_compute in evaluate sender_handle 287 (Some(multisig_prog,[::DPair (DPair amount argument) storage],m)).
+(* 287 *)
+Eval vm_compute in evaluate sender_handle 246 (Some(multisig_prog,[::DPair (DPair amount argument) storage],m)).
 
 
 
 Section Spec.
 
+(* Definition Dproj1 A B (t : tagged_data) (H : t :d: t_pair A B) : tagged_data. *)
+(* inversion H. *)
+(* exact: a. *)
+(* Defined. *)
+
+(* Lemma Dproj1_typed A B t (H : t :d: t_pair A B) : @Dproj1 A B t H :d: A. *)
+(* case: t H => // . *)
+
+
 (* stub of specification for multisig *)
-Lemma multisig_spec hsender hreceiver (b b' : blockchain) amount storage_map input_signatures_map multisig_transfer_amount needed_votes :
+Lemma multisig_correct hsender hreceiver (b b' : blockchain) amount storage_map input_signatures_map multisig_transfer_amount needed_votes :
   let void_contract_argument := DContract hreceiver in
-  let argument := DPair (DPair void_contract_argument multisig_transfer_amount) (DMap input_signatures_map) in
+  let action := (DPair void_contract_argument multisig_transfer_amount) in
+  let argument := DPair action (DMap input_signatures_map) in
   let storage :=  DPair storage_map needed_votes in
-  True (* preconditions *) ->
+  (* begin preconditions *)
+  storage_map :d: t_map t_string t_key ->
+  well_typed_map t_string t_signature input_signatures_map ->
+  (* end preconditions *)
   evaluates
     hsender
     (Some (multisig_prog,[::DPair (DPair amount argument) storage],b))
     (Some(Done,nil,b')).
 Proof.
-move => void_contract_argument argument storage Hprecondition.
+move => void_contract_argument action argument storage t_storage t_Map.
 do 70! (apply: evaluates_onestep) => /= .
+apply: evaluates_trans.
+apply: evaluates_weaken.
+set lambda := (X in DLambda X).
+
+(* x has type (pair (pair (map string key) string) uint8) *)
+
+apply: (evaluates_map_reduce_usable
+          (fun x kv =>
+             let key := kv.1 in
+             match x with
+               | DPair (DPair (DMap map1) (DSignature sig)) (Int counter) =>
+                 match get (fun x y => eq_td x y) key Unit Unit map1 with
+                   | Some (DKey key0) =>
+                     if check_signature key0 sig (get_raw_hash action) then
+                       Some (DPair (DPair (DMap map1) (DString (get_raw_hash action))) (Int (counter+1)))
+                     else
+                       None
+                   | _ => None end
+                     | _ => None end)).
+  - by typecheck_program.
+  - constructor; constructor.
+      exact: t_storage.
+  - by constructor.
+  - exact: t_Map.
+  - move => x key val Hx Hkey Hval.
+    case: x Hx => // [x1 counter] Htypex .
+    inversion Htypex.
+    case: x1 Htypex X H0 => // .
+    intros => /= .
+    (* case: counter Htypex X0 H1 => //; intros.   *)
+    case: t X H0 Htypex => // [map1] Hmap1 Heq.
+    case t0 => // ; intros.
+    case counter => //; intros.
+    case get => // ; intros.
+    case t => //; intros.
+    case check_signature => // .
+    constructor; constructor => // .
+    by inversion Htypex; inversion X.
+  - intros.
+    case x => //; intros.
+    case t => //; intros.
+    case t1 => //; intros.
+    case t2 => //; intros.
+    case t0 => //; intros.
+    rewrite /=.
+    case Hget: (get (fun x0 : tagged_data => [eta eq_td x0]) key Unit Unit m0) => // [a].
+    case a => // ; intros.
+    case checksig : (check_signature k s (get_raw_hash action)) => // .
+
+    do 41 apply: evaluates_onestep => /= .
+    apply: evaluates_onestep => /= .
+    rewrite Hget.
+    do 25 apply: evaluates_onestep => /= .
+    inversion X1.
+    (* have Ha : a :d: t_key by admit. *) (* we can't possibly know that yet because it depends on the map m0 being well typed and on a lemma on get's output type.. *)
+
+
+
+(* inversion Hx; inversion X. *)
+(*   do 22! (apply: evaluates_onestep) => /= . *)
+(*   apply: evaluates_onestep => /= . *)
+(*   inversion X1. *)
+(*   apply: evaluates_onestep => /= . *)
+(*   case Hget : get => [a1|]. *)
+(*   admit. *)
+(* apply: evaluates_onestep => /= . *)
 Abort.
+
+End Spec.

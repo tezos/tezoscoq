@@ -163,6 +163,7 @@ Inductive tagged_data:=
 | DLambda : instr -> tagged_data
 | DOption : (option tagged_data) -> tagged_data
 | DContract : handle -> tagged_data
+| DList : list tagged_data -> tagged_data
 with
 instr : Type :=
 | Seq : instr -> instr -> instr
@@ -217,6 +218,7 @@ Fixpoint serialize (t : tagged_data) : string :=
     | DLambda l => "<lambda>"
     | DOption o => match o with Some o => "Some "++(serialize o) | None => "None" end
     | DContract handle => "<Contract : <handle> >"
+    | DList l => "<TODO: encoding of lists>"
   end.
 
 Definition get_raw_hash (x : tagged_data) :=
@@ -269,6 +271,12 @@ Definition is_bool d :=
 Definition is_int i :=
   match i with
     | Int _ => true
+    | _ => false
+  end.
+
+Definition is_pair x :=
+  match x with
+    | DPair _ _ => true
     | _ => false
   end.
 
@@ -486,6 +494,13 @@ with has_data_type : tagged_data -> type -> Type :=
 | T_bool : forall b, DBool b :d: t_bool
 | T_Int : forall z, Int z :d: t_int
 | T_Unit : Unit :d: t_unit
+| T_Pair : forall a b ta tb, a :d: ta -> b :d: tb -> DPair a b :d: t_pair ta tb
+| T_Tez : forall t, DTez t :d: t_tez
+| T_option : forall o t, o :d: t -> DOption (Some o) :d: t_option t
+| T_map : forall m dfk dfv ta tb, dfk :d: ta -> dfv :d: tb -> (forall i, let kv := nth (dfk,dfv) m i in DPair kv.1 kv.2 :d: t_pair ta tb) -> DMap m :d: t_map ta tb
+| T_string : forall s, DString s :d: t_string
+| T_list : forall l A, DList l :d: t_list A
+| T_signature : forall s, DSignature s :d: t_signature
 where "d ':d:' DT" := (has_data_type d DT).
 
 Hint Constructors has_instr_type.
@@ -547,3 +562,49 @@ Ltac typecheck_program :=
     else refine (IT_comp_nil1 _ _ _) || refine (IT_comp_nil2 _ _ _).
 
 (*End TypingJudgements.*)
+
+(* provides a default value for each type *)
+Fixpoint default (t : type) : tagged_data :=
+  match t with
+    | t_int => Int 0
+    | t_unit => Unit
+    | t_bool => DBool true
+    | t_pair a b => DPair (default a) (default b)
+    | t_string => DString (Sstring "")
+    | t_option ta => (DOption (Some(default ta)))
+    | t_list ta => DList [default ta]
+    | t_map ta tb => DMap ([(default ta, default tb)])
+    | t_signature => DSignature (Sign (K "default key") (Sstring ""))
+    | t_key => DKey (K "default key")
+    | t_tez => DTez (Tez 0)
+    | t_contract a b => DContract 0%nat(* (DROP;;PUSH (default b)) *)
+    | t_quotation a => Unit (* missing datatype *)
+  end.
+
+Definition well_typed_map ta tb m := (forall i, let kv := nth (default ta,default tb) m i in DPair kv.1 kv.2 :d: t_pair ta tb).
+
+Lemma type_default (t : type) : default t :d: t.
+Proof.
+elim: t => //= .
+- by move => ta Ha tb Hb // ; constructor.
+- by move => t Ht;constructor.
+- move => t H t' Ht'. econstructor.
+    exact: H.
+    exact: Ht'.
+    case => [|i] //= ; constructor => //= .
+    by rewrite nth_nil.
+    by rewrite nth_nil.
+- admit. (* FIXME *)
+- admit. (* FIXME *)
+- admit. (* FIXME *)
+Admitted.
+
+Lemma typed_well_typed_map ta tb m : DMap m :d: t_map ta tb -> well_typed_map ta tb m.
+Proof.
+move => H; inversion H.
+move => i.
+case Hi : (size m <= i)%N.
+  by rewrite nth_default //= ; constructor; exact: type_default.
+rewrite (set_nth_default (dfk,dfv)) //.
+by rewrite ltnNge Hi.
+Qed.
