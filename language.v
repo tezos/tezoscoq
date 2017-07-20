@@ -151,7 +151,7 @@ explicit accounts and implicit ones and their handles are natural integers incre
 
 Definition handle := nat.
 
-Inductive tagged_data:=
+Inductive tagged_data :=
 | Int : int -> tagged_data
 | Unit
 | DBool : bool -> tagged_data

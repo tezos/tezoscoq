@@ -217,7 +217,7 @@ Definition amount := DTez (Tez 42).
 
 (* 287 *)
 Eval vm_compute in m.
-Eval vm_compute in evaluate sender_handle 287 (Some(multisig_prog,[::DPair (DPair amount argument) storage],m)).
+Compute evaluate sender_handle 287 (Some(multisig_prog,[::DPair (DPair amount argument) storage],m)).
 
 
 
@@ -255,7 +255,13 @@ Lemma multisig_correct hsender hreceiver (b b' : blockchain) amount storage_map 
     (Some(Done,nil,b')).
 Proof.
 move => void_contract_argument action argument storage typed_amount typed_contract Hineq t_storage t_Map.
-do 70! (apply: evaluates_onestep) => /= .
+(* does not work *)
+(* Time apply (evaluates_nsteps 70 ) . *)
+(* set x := evaluate _ _ _. *)
+(* (* cbv beta zeta delta in x. *) *)
+(* compute in x. *)
+
+Time do 70! (apply: evaluates_onestep) => /= .
 apply: evaluates_trans.
 apply: evaluates_weaken.
 set lambda := (X in DLambda X).

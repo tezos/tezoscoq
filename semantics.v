@@ -332,6 +332,18 @@ Proof.
 by move => [f Hf]; exists f.+1 ;rewrite evaluate_Sr.
 Qed.
 
+Lemma evaluates_nsteps h n st1 st2 :
+  evaluates h (evaluate h n st1) st2 ->
+  evaluates h st1 st2.
+Proof.
+elim: n h st1 st2 => [|n HIn] h st1 st2 //= H.
+apply: evaluates_trans; last first.
+  apply: HIn.
+  apply: evaluates_onestep.
+  exact: H.
+exact: evaluates_self.
+Qed.
+
 Lemma evaluates_weaken h: forall i1 i1' i2 s s1 m m1,
   evaluates h (Some(i1,s,m)) (Some(i1',s1,m1)) ->
   evaluates h (Some(i1;;i2,s,m)) (Some(i1';;i2,s1,m1)).
